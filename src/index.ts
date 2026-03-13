@@ -16,10 +16,18 @@ export type { RedisClient } from "./storage/redis-store";
 export { InMemoryVectorStore } from "./storage/vector-store";
 
 // Embeddings
+export { CohereEmbedder } from "./embeddings/cohere";
+export type { CohereEmbeddingsOptions } from "./embeddings/cohere";
+export { GeminiEmbedder } from "./embeddings/gemini";
+export type { GeminiEmbeddingsOptions } from "./embeddings/gemini";
+export { OllamaEmbedder } from "./embeddings/ollama";
+export type { OllamaEmbeddingsOptions } from "./embeddings/ollama";
 export { OpenAIEmbedder } from "./embeddings/openai";
 export type { OpenAIEmbeddingsOptions } from "./embeddings/openai";
 
 // Adapters
+export { AnthropicAdapter } from "./adapters/anthropic";
+export { GeminiAdapter } from "./adapters/gemini";
 export { GenkitAdapter } from "./adapters/genkit";
 export { OpenAIAdapter } from "./adapters/openai";
 export { VercelAIAdapter } from "./adapters/vercel-ai";
