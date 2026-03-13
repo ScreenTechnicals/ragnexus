@@ -34,6 +34,14 @@
   ],
   "author": "RagNexus Team",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ScreenTechnicals/ragnexus.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ScreenTechnicals/ragnexus/issues"
+  },
+  "homepage": "https://github.com/ScreenTechnicals/ragnexus#readme",
   "type": "commonjs",
   "devDependencies": {
     "@crawlee/playwright": "^3.16.0",
