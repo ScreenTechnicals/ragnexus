@@ -158,6 +158,25 @@ declare class InMemoryStore implements MemoryStore {
     delete(userId: string, memoryId: string): Promise<void>;
 }
 
+interface QdrantClientInstance {
+    upsert(collectionName: string, config: {
+        wait: boolean;
+        points: any[];
+    }): Promise<any>;
+    search(collectionName: string, config: {
+        vector: number[];
+        limit: number;
+    }): Promise<any[]>;
+}
+declare class QdrantVectorStore implements VectorStore {
+    private client;
+    private collectionName;
+    private embedder;
+    constructor(client: QdrantClientInstance, embedder: Embedder, collectionName?: string);
+    add(docs: RAGDocument[]): Promise<void>;
+    search(vector: number[], topK?: number): Promise<RAGDocument[]>;
+}
+
 interface RedisClient {
     zadd(key: string, score: number, member: string): Promise<any>;
     zrevrange(key: string, start: number, stop: number): Promise<string[]>;
@@ -243,4 +262,21 @@ declare class VercelAIAdapter {
     streamTextWithContext(aiSdkStreamText: any, options: any, ragOptions: Omit<RAGQueryOptions, "messages">): Promise<any>;
 }
 
-export { ContextBuilder, type Embedder, GenkitAdapter, type GuardrailOptions, Guardrails, InMemoryStore, InMemoryVectorStore, type MemoryFact, MemoryManager, type MemoryStore, OpenAIAdapter, OpenAIEmbedder, type OpenAIEmbeddingsOptions, type RAGDocument, RAGEngine, type RAGEngineConfig, type RAGQueryOptions, type RedisClient, RedisMemoryStore, Retriever, type RetrieverOptions, type VectorStore, VercelAIAdapter, createRag };
+interface CrawleeOptions {
+    maxRequestsPerCrawl?: number;
+    headless?: boolean;
+}
+declare class WebCrawler {
+    private options;
+    constructor(options?: CrawleeOptions);
+    /**
+     * Crawls a single URL and extracts the text content.
+     */
+    scrapeUrl(url: string): Promise<RAGDocument>;
+    /**
+     * Crawls a list of URLs concurrently and extracts text content.
+     */
+    scrapeBatch(urls: string[]): Promise<RAGDocument[]>;
+}
+
+export { ContextBuilder, type CrawleeOptions, type Embedder, GenkitAdapter, type GuardrailOptions, Guardrails, InMemoryStore, InMemoryVectorStore, type MemoryFact, MemoryManager, type MemoryStore, OpenAIAdapter, OpenAIEmbedder, type OpenAIEmbeddingsOptions, type QdrantClientInstance, QdrantVectorStore, type RAGDocument, RAGEngine, type RAGEngineConfig, type RAGQueryOptions, type RedisClient, RedisMemoryStore, Retriever, type RetrieverOptions, type VectorStore, VercelAIAdapter, WebCrawler, createRag };

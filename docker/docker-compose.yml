@@ -1,0 +1,26 @@
+version: "3.8"
+services:
+  # Redis for Memory facts and fast caching
+  redis:
+    image: redis:7-alpine
+    container_name: contextkit-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+  # Qdrant for Vector Embeddings
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: contextkit-qdrant
+    ports:
+      - "6333:6333" # REST API
+      - "6334:6334" # gRPC
+    volumes:
+      - qdrant_data:/qdrant/storage
+    restart: unless-stopped
+
+volumes:
+  redis_data:
+  qdrant_data:
