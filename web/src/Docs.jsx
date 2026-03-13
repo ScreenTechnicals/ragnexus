@@ -440,7 +440,7 @@ function Docs() {
 
           <footer className="docs-footer" style={{ marginTop: "80px" }}>
             <span style={{ color: "var(--text-secondary)" }}>
-              © 2024 RagNexus Engine
+              © 2026 RagNexus Engine
             </span>
             <div style={{ display: "flex", gap: "1rem" }}>
               <a
