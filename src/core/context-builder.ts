@@ -1,4 +1,4 @@
-import { MemoryFact, RAGDocument } from "../types";
+import { MemoryFact, RAGDocument, RAGMessage } from "../types";
 import { Guardrails } from "./guardrails";
 
 export class ContextBuilder {
@@ -8,16 +8,10 @@ export class ContextBuilder {
         this.guardrails = guardrails;
     }
 
+    // ─── Public API ──────────────────────────────────────────────────────────
+
     /**
-     * Deterministically assemble the full context payload.
-     * Format:
-     * SYSTEM
-     * ↓
-     * MEMORY
-     * ↓
-     * RETRIEVED DOCS
-     * ↓
-     * USER MESSAGE
+     * Build a standalone prompt string (useful for single-turn APIs).
      */
     public buildPrompt(
         systemPrompt: string | undefined,
@@ -25,53 +19,56 @@ export class ContextBuilder {
         retrievedDocs: RAGDocument[],
         userQuery: string
     ): string {
-        const parts: string[] = [];
-
-        // 1. System Prompt
-        if (systemPrompt) {
-            parts.push(systemPrompt);
-        }
-
-        // 2. Memory
-        if (memories && memories.length > 0) {
-            const memoryText = memories
-                .sort((a, b) => b.importance - a.importance) // Most important first
-                .map((m) => `- ${m.content}`)
-                .join("\n");
-
-            parts.push(`Relevant memory about the user:\n${memoryText}`);
-        }
-
-        // 3. Retrieved Docs (Sandboxed by Guardrails)
-        if (retrievedDocs && retrievedDocs.length > 0) {
-            const sandboxText = this.guardrails.sandboxContext(retrievedDocs);
-            parts.push(sandboxText);
-        }
-
-        // 4. User Message
+        const parts = this.buildContextParts(systemPrompt, memories, retrievedDocs);
         parts.push(`User:\n${userQuery}`);
-
         return parts.join("\n\n---\n\n");
     }
 
     /**
-     * Inject into AI SDK Messages array.
-     * By convention, we can prepend a system message, or combine it.
+     * Inject RAG context into a messages array (Vercel AI SDK / Genkit format).
+     * Prepends or augments the system message with memory + retrieved docs.
      */
     public injectIntoMessages(
-        messages: any[],
+        messages: RAGMessage[],
         systemPrompt: string | undefined,
         memories: MemoryFact[],
         retrievedDocs: RAGDocument[]
-    ): any[] {
+    ): RAGMessage[] {
+        const parts = this.buildContextParts(systemPrompt, memories, retrievedDocs);
+        if (!parts.length) return [...messages];
+
+        const injected = parts.join("\n\n---\n\n");
         const newMessages = [...messages];
+        const sysIdx = newMessages.findIndex((m) => m.role === "system");
 
-        // Find if there's an existing system message
-        let systemMessageIndex = newMessages.findIndex((m) => m.role === "system");
+        if (sysIdx >= 0) {
+            newMessages[sysIdx] = {
+                ...newMessages[sysIdx],
+                content: `${newMessages[sysIdx].content}\n\n${injected}`,
+            };
+        } else {
+            newMessages.unshift({ role: "system", content: injected });
+        }
 
-        // We will build the context to append to the system prompt
+        return newMessages;
+    }
+
+    // ─── Private ─────────────────────────────────────────────────────────────
+
+    /**
+     * Shared core: assembles the ordered list of context parts.
+     * Used by both buildPrompt() and injectIntoMessages() to avoid duplication.
+     */
+    private buildContextParts(
+        systemPrompt: string | undefined,
+        memories: MemoryFact[],
+        retrievedDocs: RAGDocument[]
+    ): string[] {
         const parts: string[] = [];
-        if (systemPrompt) parts.push(systemPrompt);
+
+        if (systemPrompt) {
+            parts.push(systemPrompt);
+        }
 
         if (memories && memories.length > 0) {
             const memoryText = memories
@@ -82,26 +79,9 @@ export class ContextBuilder {
         }
 
         if (retrievedDocs && retrievedDocs.length > 0) {
-            const sandboxText = this.guardrails.sandboxContext(retrievedDocs);
-            parts.push(sandboxText);
+            parts.push(this.guardrails.sandboxContext(retrievedDocs));
         }
 
-        const injectedSystemContent = parts.join("\n\n---\n\n");
-
-        if (injectedSystemContent) {
-            if (systemMessageIndex >= 0) {
-                newMessages[systemMessageIndex] = {
-                    ...newMessages[systemMessageIndex],
-                    content: `${newMessages[systemMessageIndex].content}\n\n${injectedSystemContent}`,
-                };
-            } else {
-                newMessages.unshift({
-                    role: "system",
-                    content: injectedSystemContent,
-                });
-            }
-        }
-
-        return newMessages;
+        return parts;
     }
 }

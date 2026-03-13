@@ -1,5 +1,6 @@
 import { PlaywrightCrawler } from "@crawlee/playwright";
 import { RAGDocument } from "../types";
+import { sha256 } from "../utils/hash";
 
 export interface CrawleeOptions {
     maxRequestsPerCrawl?: number;
@@ -25,6 +26,13 @@ export class WebCrawler {
 
     /**
      * Crawls a list of URLs concurrently and extracts text content.
+     *
+     * Document IDs are deterministic — derived from SHA-256(url) — so re-crawling
+     * the same URL always produces the same id. This enables upsert() to detect
+     * whether the page content has actually changed since the last crawl.
+     *
+     * HTTP cache headers (ETag, Last-Modified) are captured in metadata when
+     * the server provides them, so callers can implement conditional fetching.
      */
     public async scrapeBatch(urls: string[]): Promise<RAGDocument[]> {
         const results: RAGDocument[] = [];
@@ -32,27 +40,34 @@ export class WebCrawler {
         const crawler = new PlaywrightCrawler({
             maxRequestsPerCrawl: this.options.maxRequestsPerCrawl,
             headless: this.options.headless,
-            requestHandler: async ({ page, request }) => {
+            requestHandler: async ({ page, request, response }) => {
                 // Wait for network to be idle to ensure dynamic content loads
                 await page.waitForLoadState('networkidle');
 
-                // Extract title and main text content using Playwright native methods
                 const title = await page.title();
 
-                // Simple extraction: stripping scripts and styles, getting text
                 const textContent = await page.evaluate(() => {
                     const elementsToRemove = document.querySelectorAll('script, style, nav, footer, iframe, noscript');
                     elementsToRemove.forEach(el => el.remove());
                     return document.body.innerText || "";
                 });
 
+                // Capture HTTP cache-validation headers when available
+                const headers = response?.headers() ?? {};
+                const etag = headers['etag'];
+                const lastModified = headers['last-modified'];
+
                 results.push({
-                    id: `crawlee-${crypto.randomUUID()}`,
+                    // Deterministic ID: same URL always → same ID
+                    id: sha256(request.url),
                     text: textContent.trim(),
                     source: request.url,
                     metadata: {
                         title,
-                        crawledAt: new Date().toISOString()
+                        crawledAt: new Date().toISOString(),
+                        // Only include headers if the server sent them
+                        ...(etag && { etag }),
+                        ...(lastModified && { lastModified }),
                     }
                 });
             },
@@ -61,7 +76,6 @@ export class WebCrawler {
             }
         });
 
-        // Add requests and run
         await crawler.addRequests(urls);
         await crawler.run();
 

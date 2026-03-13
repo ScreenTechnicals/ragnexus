@@ -7,6 +7,11 @@ import { Retriever, RetrieverOptions } from "./retrieval/retriever";
 // Types
 export type * from "./types";
 
+// Utils
+export { sha256 } from "./utils/hash";
+export { TextSplitter } from "./utils/text-splitter";
+export type { TextSplitterOptions } from "./utils/text-splitter";
+
 // Storage
 export { InMemoryStore } from "./storage/memory-store";
 export { QdrantVectorStore } from "./storage/qdrant-store";
@@ -32,6 +37,10 @@ export { GenkitAdapter } from "./adapters/genkit";
 export { OpenAIAdapter } from "./adapters/openai";
 export { VercelAIAdapter } from "./adapters/vercel-ai";
 
+// Rerankers
+export { CohereReranker } from "./rerankers/cohere";
+export type { CohereRerankerOptions } from "./rerankers/cohere";
+
 // Crawlers
 export { WebCrawler } from "./crawlers/crawlee";
 export type { CrawleeOptions } from "./crawlers/crawlee";
@@ -51,4 +60,5 @@ export type {
     RAGEngineConfig,
     RetrieverOptions
 };
+
 

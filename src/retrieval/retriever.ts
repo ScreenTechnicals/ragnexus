@@ -1,5 +1,5 @@
 import { Guardrails } from "../core/guardrails";
-import { Embedder, RAGDocument, VectorStore } from "../types";
+import { Embedder, RAGDocument, Reranker, VectorStore } from "../types";
 
 export interface RetrieverOptions {
     topK?: number;
@@ -9,40 +9,43 @@ export class Retriever {
     private vectorStore: VectorStore;
     private embedder: Embedder;
     private guardrails: Guardrails;
+    private reranker?: Reranker;
 
-    constructor(vectorStore: VectorStore, embedder: Embedder, guardrails: Guardrails) {
+    constructor(
+        vectorStore: VectorStore,
+        embedder: Embedder,
+        guardrails: Guardrails,
+        reranker?: Reranker
+    ) {
         this.vectorStore = vectorStore;
         this.embedder = embedder;
         this.guardrails = guardrails;
+        this.reranker = reranker;
     }
 
     /**
      * Full retrieval pipeline:
      * 1. Embed query
-     * 2. Semantic search
-     * 3. (Optional Rerank)
-     * 4. Context Poisoning Check (Layer 1 & 3 via Guardrails)
+     * 2. Vector / hybrid search
+     * 3. Cross-encoder rerank (if configured)
+     * 4. Guardrails (relevance filter, density rejection, instruction strip)
      */
     public async retrieve(query: string, options?: RetrieverOptions): Promise<RAGDocument[]> {
+        const topK = options?.topK ?? 5;
+
         // 1. Embed
         const queryVector = await this.embedder.embed(query);
 
-        // 2. Search
-        const topK = options?.topK ?? 5;
-        const rawResults = await this.vectorStore.search(queryVector, topK);
+        // 2. Search — fetch more candidates when a reranker will trim the list
+        const fetchK = this.reranker ? Math.max(topK * 3, 20) : topK;
+        const rawResults = await this.vectorStore.search(queryVector, fetchK);
 
-        // 3. Rerank (Stub for now, could integrate Cohere/Jina)
-        const rankedResults = this.rerank(query, rawResults);
+        // 3. Rerank (cross-encoder) then trim to topK
+        const rankedResults = this.reranker
+            ? (await this.reranker.rerank(query, rawResults)).slice(0, topK)
+            : rawResults;
 
-        // 4. Guardrails processing (relevance filter + instruction strip)
-        const safeResults = this.guardrails.processRetrievedDocs(rankedResults);
-
-        return safeResults;
-    }
-
-    private rerank(query: string, docs: RAGDocument[]): RAGDocument[] {
-        // Basic implementation: trust the vector store ordering
-        // In production, we'd use a cross-encoder model here
-        return docs;
+        // 4. Guardrails
+        return this.guardrails.processRetrievedDocs(rankedResults);
     }
 }
