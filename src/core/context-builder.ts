@@ -2,23 +2,16 @@ import { MemoryFact, RAGDocument, RAGMessage } from "../types";
 import { Guardrails } from "./guardrails";
 
 /**
- * GROUNDING_PREFIX — prepended to every system message when RAG context is injected.
- * Explicitly instructs the model to stay within retrieved context and avoid hallucination.
+ * GROUNDING_INSTRUCTION — appended to the context block (not the full system prompt)
+ * ONLY when actual documents were retrieved.
+ *
+ * The key principle: be a helpful assistant normally, but when you have real retrieved
+ * context, stay grounded in it and cite sources rather than hallucinating beyond them.
  */
-const GROUNDING_PREFIX = `You are a precise, grounded assistant. Follow these rules strictly:
-1. Answer ONLY using the retrieved context provided below.
-2. If the context does not contain the answer, say exactly: "I don't have enough information to answer that based on the provided documents."
-3. Do NOT speculate, infer beyond what is stated, or use your general training knowledge to fill gaps.
-4. Always be concise — avoid padding, repetition, or unnecessary elaboration.
-5. If you cite a fact, it must be traceable to a specific document number in the context.`;
-
-/**
- * NO_CONTEXT_NOTICE — injected when retrieval returns zero usable documents.
- * This prevents the model from hallucinating an answer from training data.
- */
-const NO_CONTEXT_NOTICE = `[SYSTEM NOTICE] No relevant documents were retrieved for this query.
-You MUST respond with: "I don't have enough information to answer that based on the available documents."
-Do NOT attempt to answer from your general knowledge.`;
+const GROUNDING_INSTRUCTION = `
+When answering, prioritise the retrieved documents above. You may cite them by document number.
+If the user's question cannot be answered from the retrieved context alone, say so briefly,
+then offer what general help you can — do not refuse outright.`;
 
 export class ContextBuilder {
     private guardrails: Guardrails;
@@ -46,9 +39,14 @@ export class ContextBuilder {
     /**
      * Inject RAG context into a messages array (Vercel AI SDK / Genkit format).
      *
-     * - When docs are found: prepends grounding instructions + sandboxed context
-     * - When NO docs are found: injects a strict "no context" notice that
-     *   instructs the model not to answer from training data
+     * Behaviour:
+     * - If docs were retrieved: append the sandboxed context block (+ brief grounding note)
+     *   to the existing system message. The model remains fully capable of normal conversation
+     *   but is nudged to prefer the retrieved facts.
+     * - If NO docs were retrieved: return messages unchanged. The model acts as a normal
+     *   assistant — casual greetings, general questions, chitchat all work fine.
+     *
+     * This prevents the notorious "I don't have enough information" response to "hey hi".
      */
     public injectIntoMessages(
         messages: RAGMessage[],
@@ -56,13 +54,18 @@ export class ContextBuilder {
         memories: MemoryFact[],
         retrievedDocs: RAGDocument[]
     ): RAGMessage[] {
-        const parts = this.buildContextParts(systemPrompt, memories, retrievedDocs);
-        const hasContext = retrievedDocs.length > 0;
+        // Build the context parts (system prompt + memory + retrieved docs)
+        const contextParts = this.buildContextParts(systemPrompt, memories, retrievedDocs);
 
-        // Always inject either grounding + context OR the no-context notice
-        const injection = hasContext
-            ? [GROUNDING_PREFIX, ...parts].join("\n\n---\n\n")
-            : NO_CONTEXT_NOTICE;
+        // No retrieved docs AND no extra memory/systemPrompt → nothing to inject, leave as-is
+        if (contextParts.length === 0) return [...messages];
+
+        // Build the injection string
+        // Only append grounding note when actual documents were retrieved
+        const hasRetrievedDocs = retrievedDocs.length > 0;
+        const injection = hasRetrievedDocs
+            ? contextParts.join("\n\n---\n\n") + GROUNDING_INSTRUCTION
+            : contextParts.join("\n\n---\n\n");
 
         const newMessages = [...messages];
         const sysIdx = newMessages.findIndex(m => m.role === "system");

@@ -37,16 +37,16 @@ function Home() {
 
       <section className="hero">
         <div className="container">
-          <div className="hero-tag">Now in v1.0.0 — Pure TypeScript</div>
+          <div className="hero-tag">Now in v1.1.0 — Pure TypeScript</div>
           <h1>
-            <span className="gradient-text">Safe RAG + Memory</span>
+            <span className="gradient-text">Accurate RAG + Memory</span>
             <br />
             Built to Run Anywhere.
           </h1>
           <p className="hero-sub">
-            A deterministically safe middleware for modern AI apps. Neutralize
-            prompt injections, manage contextual memory, and secure your LLM
-            workflows.
+            Production-grade RAG middleware with text chunking, hybrid search,
+            cross-encoder reranking, 4-layer guardrails, and adapters for every
+            major LLM provider.
           </p>
           <div className="cta-group">
             <Link to="/docs" className="btn btn-primary">
@@ -62,26 +62,50 @@ function Home() {
       <section id="features" className="container features">
         <div className="feature-card">
           <div className="feature-icon">🛡️</div>
-          <h3>Built-in Guardrails</h3>
+          <h3>4-Layer Guardrails</h3>
           <p>
-            3-layer protection including instruction stripping and content
-            sandboxing to stop context poisoning.
+            Relevance filtering, density rejection, instruction stripping, and
+            token budget enforcement — zero hallucination by design.
+          </p>
+        </div>
+        <div className="feature-card">
+          <div className="feature-icon">🔍</div>
+          <h3>Hybrid Search + Reranking</h3>
+          <p>
+            BM25 keyword + cosine semantic blending, plus cross-encoder
+            reranking (Cohere) for maximum retrieval precision.
+          </p>
+        </div>
+        <div className="feature-card">
+          <div className="feature-icon">⚡</div>
+          <h3>Upsert & Change Detection</h3>
+          <p>
+            Content-hash deduplication — skip unchanged docs, re-embed only what
+            changed, keep your vector store lean.
+          </p>
+        </div>
+        <div className="feature-card">
+          <div className="feature-icon">✂️</div>
+          <h3>Text Splitting</h3>
+          <p>
+            Recursive text splitter with configurable chunk size, overlap, and
+            deterministic per-chunk IDs for precise embedding.
           </p>
         </div>
         <div className="feature-card">
           <div className="feature-icon">🧠</div>
           <h3>Contextual Memory</h3>
           <p>
-            Priority-queued memory injection that scales. Supports Redis and
-            In-Memory storage natively.
+            Priority-queued per-user memory injected by importance score.
+            Supports Redis and in-memory storage.
           </p>
         </div>
         <div className="feature-card">
           <div className="feature-icon">🔌</div>
-          <h3>Pluggable SDK</h3>
+          <h3>5 Provider Adapters</h3>
           <p>
-            Works natively with Vercel AI SDK, OpenAI, and Google Genkit. Swap
-            endpoints and vector stores easily.
+            OpenAI, Anthropic, Gemini, Genkit, and Vercel AI SDK — all with
+            streaming and typed message formats.
           </p>
         </div>
       </section>
@@ -105,19 +129,22 @@ function Home() {
               </span>
             </div>
           }
-          code={`import { createRag, OpenAIAdapter } from "ragnexus";
+          code={`import { createRag, OpenAIEmbedder, InMemoryVectorStore, TextSplitter, CohereReranker } from "ragnexus";
 
-// 1. Initialize with guardrails
+// 1. Initialize with all the bells and whistles
 const rag = createRag({
-  storage: { vector: myStore, memory: myMemory },
-  guardrails: { minRelevanceScore: 0.7 }
+  storage: { vector: new InMemoryVectorStore(embedder), memory: myMemory },
+  embedder: new OpenAIEmbedder({ model: "text-embedding-3-small" }),
+  reranker: new CohereReranker({ topN: 3 }),
+  guardrails: { minRelevanceScore: 0.5, maxTokens: 3000 },
+  onRetrieve: (docs) => console.log("Retrieved:", docs.length),
 });
 
-// 2. Wrap your LLM calls securely
-const adapter = new OpenAIAdapter(rag);
-const payload = await adapter.getCompletionConfig({
-  messages: [{ role: "user", content: "What fixes RAG?" }]
-});`}
+// 2. Chunk + upsert with change detection
+const splitter = new TextSplitter({ chunkSize: 800, chunkOverlap: 100 });
+const docs = await crawler.scrapeBatch(["https://example.com"]);
+const result = await rag.upsertDocuments(splitter.splitDocuments(docs));
+console.log(result); // { added: 12, updated: 2, skipped: 38 }`}
         />
       </section>
 
