@@ -3,7 +3,7 @@
   "retiredSessionsCount": 0,
   "sessions": [
     {
-      "id": "session_c2l37mexsw",
+      "id": "session_fnbTVgjkV9",
       "cookieJar": {
         "version": "tough-cookie@6.0.1",
         "storeType": "MemoryCookieStore",
@@ -16,14 +16,14 @@
       "userData": {},
       "maxErrorScore": 3,
       "errorScoreDecrement": 0.5,
-      "expiresAt": "2026-03-13T12:39:15.855Z",
-      "createdAt": "2026-03-13T11:49:15.855Z",
+      "expiresAt": "2026-03-13T15:21:44.097Z",
+      "createdAt": "2026-03-13T14:31:44.097Z",
       "usageCount": 0,
       "maxUsageCount": 50,
       "errorScore": 0
     },
     {
-      "id": "session_UKBpP0XwF0",
+      "id": "session_4mscc0KCrr",
       "cookieJar": {
         "version": "tough-cookie@6.0.1",
         "storeType": "MemoryCookieStore",
@@ -31,13 +31,82 @@
         "enableLooseMode": false,
         "allowSpecialUseDomain": true,
         "prefixSecurity": "silent",
-        "cookies": []
+        "cookies": [
+          {
+            "key": "_gh_sess",
+            "value": "0j7l2L4%2Fby%2BmTjI9JQRRB4uIjYZoFV9HayxK%2BSlg2gc1YWXvMszFqlrsCGa2jAoMuwb2DQTnO40EnHbaUZBi7B562v1KsV9HiFiA8IEeIQCQf%2BSF0Gm5Uj%2FwXBApzkHvbNUHEDIz8dThHZ3ARd9ti%2Br1XiREQg0cJ73U49rMOXJ4P8D0AsmD%2Fm%2FxLxJFY9VEEV29pqYjX22vxkWj2TAFbNnk4hIw59Q%2BpoKV2MUCoHuhFT%2BsSgcnsoYcyrvHs1fGrwoElj9CfUxrcR53w3B%2BGQ%3D%3D--zmW4IXVay0JnnVtj--B8BkVxtR4zsBxX3DjGSNlQ%3D%3D",
+            "expires": "2026-03-13T15:21:47.530Z",
+            "domain": "github.com",
+            "path": "/",
+            "secure": true,
+            "httpOnly": true,
+            "hostOnly": true,
+            "creation": "2026-03-13T14:31:47.532Z",
+            "lastAccessed": "2026-03-13T14:31:47.532Z"
+          },
+          {
+            "key": "_octo",
+            "value": "GH1.1.1396401301.1773412305",
+            "expires": "2027-03-13T15:31:45.674Z",
+            "domain": "github.com",
+            "path": "/",
+            "secure": true,
+            "hostOnly": false,
+            "creation": "2026-03-13T14:31:47.532Z",
+            "lastAccessed": "2026-03-13T14:31:47.532Z"
+          },
+          {
+            "key": "logged_in",
+            "value": "no",
+            "expires": "2027-03-13T15:31:45.675Z",
+            "domain": "github.com",
+            "path": "/",
+            "secure": true,
+            "httpOnly": true,
+            "hostOnly": false,
+            "creation": "2026-03-13T14:31:47.532Z",
+            "lastAccessed": "2026-03-13T14:31:47.532Z"
+          },
+          {
+            "key": "cpu_bucket",
+            "value": "xlg",
+            "expires": "2026-03-13T15:21:47.530Z",
+            "domain": "github.com",
+            "path": "/",
+            "secure": true,
+            "hostOnly": false,
+            "creation": "2026-03-13T14:31:47.532Z",
+            "lastAccessed": "2026-03-13T14:31:47.532Z"
+          },
+          {
+            "key": "preferred_color_mode",
+            "value": "light",
+            "expires": "2026-03-13T15:21:47.530Z",
+            "domain": "github.com",
+            "path": "/",
+            "secure": true,
+            "hostOnly": false,
+            "creation": "2026-03-13T14:31:47.532Z",
+            "lastAccessed": "2026-03-13T14:31:47.532Z"
+          },
+          {
+            "key": "tz",
+            "value": "Asia%2FCalcutta",
+            "expires": "2026-03-13T15:21:47.530Z",
+            "domain": "github.com",
+            "path": "/",
+            "secure": true,
+            "hostOnly": false,
+            "creation": "2026-03-13T14:31:47.532Z",
+            "lastAccessed": "2026-03-13T14:31:47.532Z"
+          }
+        ]
       },
       "userData": {},
       "maxErrorScore": 3,
       "errorScoreDecrement": 0.5,
-      "expiresAt": "2026-03-13T12:39:15.856Z",
-      "createdAt": "2026-03-13T11:49:15.856Z",
+      "expiresAt": "2026-03-13T15:21:44.098Z",
+      "createdAt": "2026-03-13T14:31:44.098Z",
       "usageCount": 1,
       "maxUsageCount": 50,
       "errorScore": 0

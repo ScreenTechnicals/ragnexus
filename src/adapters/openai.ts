@@ -21,7 +21,7 @@ export class OpenAIAdapter {
     ): Promise<any> {
         const rawMessages = chatCompletionParams.messages || [];
 
-        // Inject the ContextKit memory and retrieved docs into the messages
+        // Inject the RagNexus memory and retrieved docs into the messages
         const enrichedMessages = await this.engine.buildContext({
             messages: rawMessages,
             ...ragOptions,

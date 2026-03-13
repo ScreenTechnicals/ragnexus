@@ -1,24 +1,56 @@
 {
-  "name": "my-rag-engine",
+  "name": "ragnexus",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "A deterministically safe RAG + Memory SDK built to run anywhere.",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
-    "test": "vitest run"
+    "test": "vitest run",
+    "chat": "vite-node examples/openai-ink.tsx"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": [
+    "rag",
+    "ai",
+    "llm",
+    "memory",
+    "context",
+    "vercel-ai-sdk",
+    "openai",
+    "guardrails",
+    "crawler"
+  ],
+  "author": "RagNexus Team",
+  "license": "MIT",
   "type": "commonjs",
   "devDependencies": {
     "@crawlee/playwright": "^3.16.0",
     "@qdrant/js-client-rest": "^1.17.0",
     "@types/node": "^25.5.0",
+    "@types/react": "^19.2.14",
     "playwright": "^1.58.2",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3",
     "vitest": "^4.1.0"
+  },
+  "dependencies": {
+    "dotenv": "^17.3.1",
+    "ink": "^6.8.0",
+    "ink-spinner": "^5.0.0",
+    "ink-text-input": "^6.0.0",
+    "openai": "^6.27.0",
+    "react": "^19.2.4"
   }
 }

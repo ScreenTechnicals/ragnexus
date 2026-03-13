@@ -1,7 +1,7 @@
 import { createRag, InMemoryStore, QdrantVectorStore, WebCrawler } from "./src";
 
 async function runPhase2() {
-    console.log("Setting up ContextKit with Qdrant + Crawlee Playwright...");
+    console.log("Setting up RagNexus with Qdrant + Crawlee Playwright...");
 
     // 1. Setup Mock Embedder
     const mockEmbedder = {
@@ -29,7 +29,7 @@ async function runPhase2() {
                     id: "crawlee-123",
                     score: 0.98,
                     payload: {
-                        text: "ContextKit SDK connects Crawlee with Qdrant seamlessly.",
+                        text: "RagNexus SDK connects Crawlee with Qdrant seamlessly.",
                         source: "https://example.com"
                     }
                 }

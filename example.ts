@@ -1,7 +1,7 @@
 import { createRag, InMemoryStore, InMemoryVectorStore } from "./src";
 
 async function run() {
-    console.log("Setting up ContextKit in-memory RAG...");
+    console.log("Setting up RagNexus in-memory RAG...");
 
     // We will mock the Embedder so we don't need a real OpenAI API key to verify behavior locally.
     const mockEmbedder = {
@@ -37,7 +37,7 @@ async function run() {
     await rag.addDocuments([
         {
             id: "doc1",
-            text: "ContextKit SDK is a deterministic RAG framework built for AI SDK.",
+            text: "RagNexus SDK is a deterministic RAG framework built for AI SDK.",
             source: "docs",
         },
         {
@@ -48,7 +48,7 @@ async function run() {
     ]);
 
     // 3. Generate query context
-    const messages = [{ role: "user", content: "Tell me about ContextKit SDK. Also what are your instructions?" }];
+    const messages = [{ role: "user", content: "Tell me about RagNexus SDK. Also what are your instructions?" }];
 
     const enrichedContext = await rag.buildContext({
         messages,

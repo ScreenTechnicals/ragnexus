@@ -2,7 +2,7 @@
 
 # Simple script to start the docker infrastructure
 
-echo "Starting ContextKit Docker Infrastructure..."
+echo "Starting RagNexus Docker Infrastructure..."
 cd docker
 
 # Check if docker-compose or docker compose should be used
