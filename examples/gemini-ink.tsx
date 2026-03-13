@@ -10,6 +10,7 @@ import {
     GeminiEmbedder,
     InMemoryStore,
     InMemoryVectorStore,
+    TextSplitter,
     WebCrawler
 } from "../src";
 
@@ -20,13 +21,14 @@ const TARGET_URL = process.env.TARGET_URL || "https://github.com/microsoft/TypeS
 // Setup singletons outside component
 const geminiClient = process.env.GEMINI_API_KEY ? new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY }) : null;
 const crawler = new WebCrawler({ headless: true, maxRequestsPerCrawl: 5 });
+const splitter = new TextSplitter({ chunkSize: 800, chunkOverlap: 100 });
 const embedder = new GeminiEmbedder({ model: "text-embedding-004" });
 const vectorStore = new InMemoryVectorStore(embedder);
 const memoryStore = new InMemoryStore();
 const rag = createRag({
     storage: { vector: vectorStore, memory: memoryStore },
     embedder,
-    guardrails: { minRelevanceScore: 0.1 }
+    guardrails: { minRelevanceScore: 0.5, maxTokens: 3000 }
 });
 const geminiAdapter = new GeminiAdapter(rag);
 
@@ -57,7 +59,7 @@ const App = () => {
                 }
 
                 setStep('embedding');
-                await rag.addDocuments(docs);
+                await rag.addDocuments(splitter.splitDocuments(docs));
 
                 setStep('chat');
             } catch (e: any) {

@@ -10,6 +10,7 @@ import {
     InMemoryVectorStore,
     OpenAIAdapter,
     OpenAIEmbedder,
+    TextSplitter,
     WebCrawler
 } from "../src";
 
@@ -20,13 +21,14 @@ const TARGET_URL = process.env.TARGET_URL || "https://github.com/microsoft/TypeS
 // Setup singletons outside component to avoid re-initializing on re-renders
 const openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
 const crawler = new WebCrawler({ headless: true, maxRequestsPerCrawl: 5 });
+const splitter = new TextSplitter({ chunkSize: 800, chunkOverlap: 100 });
 const embedder = new OpenAIEmbedder({ model: "text-embedding-3-small" });
 const vectorStore = new InMemoryVectorStore(embedder);
 const memoryStore = new InMemoryStore();
 const rag = createRag({
     storage: { vector: vectorStore, memory: memoryStore },
     embedder,
-    guardrails: { minRelevanceScore: 0.1 }
+    guardrails: { minRelevanceScore: 0.5, maxTokens: 3000 }
 });
 const openaiAdapter = new OpenAIAdapter(rag);
 
@@ -57,7 +59,7 @@ const App = () => {
                 }
 
                 setStep('embedding');
-                await rag.addDocuments(docs);
+                await rag.addDocuments(splitter.splitDocuments(docs));
 
                 setStep('chat');
             } catch (e: any) {

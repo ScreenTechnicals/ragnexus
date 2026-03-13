@@ -11,6 +11,7 @@ import {
     GenkitAdapter,
     InMemoryStore,
     InMemoryVectorStore,
+    TextSplitter,
     WebCrawler
 } from "../src";
 
@@ -24,13 +25,14 @@ const ai = process.env.GEMINI_API_KEY ? genkit({
 }) : null;
 
 const crawler = new WebCrawler({ headless: true, maxRequestsPerCrawl: 5 });
+const splitter = new TextSplitter({ chunkSize: 800, chunkOverlap: 100 });
 const embedder = new GeminiEmbedder({ model: "text-embedding-004" });
 const vectorStore = new InMemoryVectorStore(embedder);
 const memoryStore = new InMemoryStore();
 const rag = createRag({
     storage: { vector: vectorStore, memory: memoryStore },
     embedder,
-    guardrails: { minRelevanceScore: 0.1 }
+    guardrails: { minRelevanceScore: 0.5, maxTokens: 3000 }
 });
 const genkitAdapter = new GenkitAdapter(rag);
 
@@ -61,7 +63,7 @@ const App = () => {
                 }
 
                 setStep('embedding');
-                await rag.addDocuments(docs);
+                await rag.addDocuments(splitter.splitDocuments(docs));
 
                 setStep('chat');
             } catch (e: any) {
