@@ -101,6 +101,137 @@ npm install ai @ai-sdk/openai`}
     ),
   },
 
+  architecture: {
+    title: "Architecture",
+    content: (
+      <>
+        <p>
+          RagNexus is a <strong>middleware layer</strong> that sits between your
+          application and your LLM provider. It handles everything between
+          "user asked a question" and "LLM receives enriched context."
+        </p>
+
+        <h2>Where RagNexus Sits</h2>
+        <CodeBlock
+          language="text"
+          code={`┌─────────────────────────────────────────────────┐
+│                  Your Application                │
+│  (Next.js, Express, CLI, Electron, etc.)         │
+└──────────────────────┬──────────────────────────┘
+                       │ messages + query
+                       ▼
+┌─────────────────────────────────────────────────┐
+│                   RagNexus                       │
+│                                                  │
+│  ┌──────────┐  ┌───────────┐  ┌──────────────┐  │
+│  │ Retriever│→ │ Reranker  │→ │  Guardrails  │  │
+│  │(embed +  │  │(Cohere    │  │(4-layer      │  │
+│  │ search)  │  │ cross-enc)│  │ safety)      │  │
+│  └────┬─────┘  └───────────┘  └──────┬───────┘  │
+│       │                              │           │
+│  ┌────┴─────┐  ┌───────────┐  ┌──────┴───────┐  │
+│  │ Vector   │  │  Memory   │  │   Context    │  │
+│  │ Store    │  │  Manager  │  │   Builder    │  │
+│  └──────────┘  └───────────┘  └──────────────┘  │
+│                                                  │
+│  ┌──────────────────────────────────────────┐    │
+│  │           Provider Adapters              │    │
+│  │  OpenAI · Anthropic · Gemini · Genkit    │    │
+│  │  Vercel AI SDK                           │    │
+│  └──────────────────────────────────────────┘    │
+└──────────────────────┬──────────────────────────┘
+                       │ enriched messages
+                       ▼
+┌─────────────────────────────────────────────────┐
+│              LLM Provider API                    │
+│  (OpenAI, Anthropic, Google, Ollama, etc.)       │
+└─────────────────────────────────────────────────┘`}
+        />
+
+        <h2>Data Flow</h2>
+        <p>When a user sends a message, RagNexus runs this pipeline:</p>
+        <ol>
+          <li><strong>Embed</strong> the user's query into a vector</li>
+          <li><strong>Search</strong> the vector store for relevant documents (semantic, keyword, or hybrid)</li>
+          <li><strong>Rerank</strong> results with a cross-encoder for precision (optional)</li>
+          <li><strong>Filter</strong> through 4-layer guardrails (relevance, density, instruction strip, token budget)</li>
+          <li><strong>Load</strong> user memory facts sorted by importance</li>
+          <li><strong>Assemble</strong> the final messages array with grounded context</li>
+          <li><strong>Adapt</strong> to the target LLM provider's format</li>
+        </ol>
+        <p>
+          Your app receives a ready-to-send messages array. No prompt
+          engineering, no manual context assembly, no injection vulnerabilities.
+        </p>
+      </>
+    ),
+  },
+
+  "use-cases": {
+    title: "Use Cases",
+    content: (
+      <>
+        <p>
+          RagNexus works anywhere you need an LLM to answer from{" "}
+          <strong>your data</strong> instead of its training data.
+        </p>
+
+        <h2>Customer Support Bot</h2>
+        <p>
+          Crawl your docs site, embed it, and let users ask questions. RagNexus
+          ensures the bot answers only from your documentation — never
+          hallucinating product features that don't exist.
+        </p>
+
+        <h2>Internal Knowledge Base</h2>
+        <p>
+          Ingest company wikis, Confluence pages, or Notion exports. Per-user
+          memory tracks each employee's role and preferences for personalized
+          answers.
+        </p>
+
+        <h2>Code Repository Q&A</h2>
+        <p>
+          Crawl a GitHub repo, chunk the files, and ask "what does the config
+          file do?" or "show me the auth middleware." On-demand crawling means
+          it fetches specific files only when needed.
+        </p>
+
+        <h2>Research Assistant</h2>
+        <p>
+          Feed academic papers or technical docs. The hybrid search (BM25 +
+          semantic) handles both keyword-heavy queries ("BERT attention
+          mechanism") and natural language ("how does the model handle long
+          sequences?").
+        </p>
+
+        <h2>Multi-tenant SaaS</h2>
+        <p>
+          Each tenant gets their own vector store namespace and memory store.
+          Guardrails prevent cross-tenant data leakage. Redis memory persists
+          user context across sessions.
+        </p>
+
+        <div className="callout">
+          <div className="callout-title">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="16" x2="12" y2="12"></line>
+              <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+            When NOT to use RagNexus
+          </div>
+          <p>
+            If your LLM app doesn't need external data (pure chatbot, creative
+            writing, code generation from scratch), you don't need RAG at all.
+            RagNexus adds value when the model needs to answer from{" "}
+            <strong>specific, retrievable content</strong>.
+          </p>
+        </div>
+      </>
+    ),
+  },
+
   "core-concepts": {
     title: "Core Concepts",
     content: (
@@ -185,12 +316,15 @@ const rag = createRag({
   reranker: new CohereReranker({ topN: 3 }),
   guardrails: {
     minRelevanceScore: 0.5,   // Only include relevant docs
-    maxTokens: 3000,           // Hard token budget for context
+    maxTokens: 3000,           // Token budget (GPT tokenizer, accurate)
     includeSourceAttribution: true, // Cite sources per document
   },
-  // Observability: inspect what was retrieved
-  onRetrieve: (docs) => console.log("Retrieved:", docs.map(d => d.source)),
-});`}
+});
+
+// Observability via EventEmitter
+rag.on("retrieve", (docs) => console.log("Retrieved:", docs.map(d => d.source)));
+rag.on("upsert", (result) => console.log(result)); // { added, updated, skipped }
+rag.on("guardrail:reject", (doc, reason) => console.warn(doc.id, reason));`}
           language="typescript"
         />
       </>
@@ -366,10 +500,26 @@ const results = await vectorStore.searchByText(
           language="typescript"
         />
 
+        <h2>Via the Retriever (Recommended)</h2>
         <p>
-          BM25 scoring is computed lazily on the first keyword/hybrid search and
-          invalidated automatically whenever documents are added, updated, or
-          deleted.
+          You can also use hybrid search through the standard RAG pipeline by
+          passing <code>searchMode</code> and <code>alpha</code> to{" "}
+          <code>buildContext()</code>:
+        </p>
+        <CodeBlock
+          code={`const messages = await rag.buildContext({
+  messages: [{ role: "user", content: "TypeScript decorators" }],
+  searchMode: "hybrid",  // 'semantic' | 'keyword' | 'hybrid'
+  alpha: 0.5,            // blend weight
+  topK: 5,
+});`}
+          language="typescript"
+        />
+
+        <p>
+          BM25 statistics are maintained incrementally — adding or removing
+          documents updates term frequencies in O(terms) instead of rebuilding
+          the entire index.
         </p>
       </>
     ),
@@ -464,7 +614,7 @@ class MyReranker implements Reranker {
           code={`const rag = createRag({
   guardrails: {
     minRelevanceScore: 0.5,          // 0–1, higher = stricter
-    maxTokens: 3000,                  // Context budget (~4 chars/token)
+    maxTokens: 3000,                  // Accurate GPT tokenizer counting
     maxPatternDensity: 0.05,          // Reject doc if >5% words match patterns
     includeSourceAttribution: true,   // Show source URL + score per doc
     blockedPatterns: [                // Extend or replace defaults
@@ -478,24 +628,23 @@ class MyReranker implements Reranker {
 
         <h2>Anti-Hallucination Grounding</h2>
         <p>
-          The context builder automatically injects grounding rules into every
-          system message:
+          The context builder automatically injects grounding rules into the
+          system message when documents are retrieved:
         </p>
         <ul>
           <li>
-            Answer <em>only</em> from retrieved documents
+            Use <em>only</em> the retrieved documents as source of truth
           </li>
           <li>
-            Decline with "I don't have enough information" when context is
-            insufficient
+            Clearly state when information is not found in the crawled data
           </li>
-          <li>No speculation or gap-filling from training data</li>
+          <li>Never fabricate, guess, or infer content not in the documents</li>
           <li>Cite document numbers for every fact</li>
         </ul>
         <p>
-          When retrieval returns zero usable documents, a{" "}
-          <code>[SYSTEM NOTICE]</code> is injected to force a graceful decline
-          instead of a hallucinated answer.
+          When retrieval returns zero documents, no context is injected and the
+          model operates normally — this prevents the "I don't have enough
+          information" response to casual greetings.
         </p>
 
         <div className="callout">
@@ -535,12 +684,27 @@ class MyReranker implements Reranker {
         </p>
 
         <h2>Adding Memory</h2>
+        <p>
+          Use <code>MemoryManager</code> directly to add facts. It
+          automatically deduplicates — exact matches and subsets are skipped,
+          and more detailed facts replace less detailed ones.
+        </p>
         <CodeBlock
-          code={`await rag.memoryManager.addMemory("user_123", {
+          code={`import { MemoryManager, InMemoryStore } from "ragnexus";
+
+const memoryManager = new MemoryManager(new InMemoryStore());
+
+// Returns true if added, false if duplicate
+const added = await memoryManager.addMemory("user_123", {
+  type: "fact",
   content: "User works as a Software Engineer",
   importance: 0.9,  // 0.0 – 1.0, highest injected first
-  metadata: { verified: true }
-});`}
+});
+
+// Duplicate detection:
+// "User works as a Software Engineer" → skipped (exact match)
+// "User works" → skipped (subset of existing)
+// "User works as a Senior Software Engineer at Google" → replaces (superset)`}
           language="typescript"
         />
 
@@ -588,16 +752,23 @@ class MyReranker implements Reranker {
 
         <h2>Observability</h2>
         <p>
-          Use the <code>onRetrieve</code> config hook to inspect retrieved docs
-          in real-time:
+          <code>RAGEngine</code> extends <code>EventEmitter</code> with typed events:
         </p>
         <CodeBlock
-          code={`const rag = createRag({
-  // ...
-  onRetrieve: (docs) => {
-    console.log(\`Retrieved \${docs.length} docs:\`);
-    docs.forEach(d => console.log(\` - [\${(d.score * 100).toFixed(0)}%] \${d.source}\`));
-  },
+          code={`// Fires after retrieval with filtered docs
+rag.on("retrieve", (docs) => {
+  console.log(\`Retrieved \${docs.length} docs:\`);
+  docs.forEach(d => console.log(\` - [\${(d.score * 100).toFixed(0)}%] \${d.source}\`));
+});
+
+// Fires after upsertDocuments with stats
+rag.on("upsert", (result) => {
+  console.log(\`Added: \${result.added}, Updated: \${result.updated}, Skipped: \${result.skipped}\`);
+});
+
+// Fires when guardrails reject a document
+rag.on("guardrail:reject", (doc, reason) => {
+  console.warn(\`Rejected \${doc.id}: \${reason}\`);
 });`}
           language="typescript"
         />
@@ -636,13 +807,28 @@ class MyReranker implements Reranker {
           </li>
         </ul>
 
+        <h2>Persistence (InMemoryVectorStore)</h2>
+        <p>
+          Save and load the in-memory store to disk — no re-embedding needed:
+        </p>
+        <CodeBlock
+          code={`// Save to disk
+await vectorStore.save("./my-store.json");
+
+// Load from disk (static method)
+const loaded = await InMemoryVectorStore.load("./my-store.json", embedder);
+// All docs, vectors, and BM25 state are restored — ready to search immediately`}
+          language="typescript"
+        />
+
         <h2>VectorStore Interface</h2>
         <CodeBlock
           code={`interface VectorStore {
   add(docs: RAGDocument[]): Promise<void>;
-  upsert(docs: RAGDocument[]): Promise<UpsertResult>; // change-detection
+  upsert(docs: RAGDocument[]): Promise<UpsertResult>;
   delete(ids: string[]): Promise<void>;
   search(vector: number[], topK?: number): Promise<RAGDocument[]>;
+  searchByText?(query: string, topK?: number, mode?: SearchMode, alpha?: number): Promise<RAGDocument[]>;
 }`}
           language="typescript"
         />
@@ -793,6 +979,8 @@ const NAV = [
     group: "Introduction",
     items: [
       { id: "getting-started", label: "Getting Started" },
+      { id: "architecture", label: "Architecture" },
+      { id: "use-cases", label: "Use Cases" },
       { id: "installation", label: "Installation" },
       { id: "core-concepts", label: "Core Concepts" },
     ],
@@ -950,7 +1138,7 @@ function Docs() {
             }}
           >
             <h1 style={{ margin: 0 }}>{currentDoc.title}</h1>
-            <span className="version-badge">v1.1.0</span>
+            <span className="version-badge">v1.0.1</span>
           </div>
 
           <div className="doc-section">{currentDoc.content}</div>

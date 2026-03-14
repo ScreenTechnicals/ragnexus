@@ -70,7 +70,7 @@ function Home() {
 
       <section className="hero">
         <div className="container">
-          <div className="hero-tag">Now in v1.1.0 — Pure TypeScript</div>
+          <div className="hero-tag">Now in v1.0.1 — Pure TypeScript</div>
           <h1>
             <span className="gradient-text">Accurate RAG + Memory</span>
             <br />
@@ -78,8 +78,8 @@ function Home() {
           </h1>
           <p className="hero-sub">
             Production-grade RAG middleware with text chunking, hybrid search,
-            cross-encoder reranking, 4-layer guardrails, and adapters for every
-            major LLM provider.
+            cross-encoder reranking, 4-layer guardrails, retry with backoff,
+            and adapters for every major LLM provider.
           </p>
           <div className="cta-group">
             <Link to="/docs" className="btn btn-primary">
@@ -170,8 +170,12 @@ const rag = createRag({
   embedder: new OpenAIEmbedder({ model: "text-embedding-3-small" }),
   reranker: new CohereReranker({ topN: 3 }),
   guardrails: { minRelevanceScore: 0.5, maxTokens: 3000 },
-  onRetrieve: (docs) => console.log("Retrieved:", docs.length),
 });
+
+// EventEmitter observability
+rag.on("retrieve", (docs) => console.log("Retrieved:", docs.length));
+rag.on("upsert", (result) => console.log("Upsert:", result));
+rag.on("guardrail:reject", (doc, reason) => console.warn("Rejected:", doc.id, reason));
 
 // 2. Chunk + upsert with change detection
 const splitter = new TextSplitter({ chunkSize: 800, chunkOverlap: 100 });
