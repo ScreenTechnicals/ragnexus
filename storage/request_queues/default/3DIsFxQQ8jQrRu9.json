@@ -1,9 +1,9 @@
 {
-	"id": "3DIsFxQQ8jQrRu9",
-	"json": "{\"id\":\"3DIsFxQQ8jQrRu9\",\"url\":\"https://github.com/sipeed/picoclaw\",\"loadedUrl\":\"https://github.com/sipeed/picoclaw\",\"uniqueKey\":\"https://github.com/sipeed/picoclaw\",\"method\":\"GET\",\"noRetry\":false,\"retryCount\":1,\"errorMessages\":[\"page.waitForLoadState: Timeout 30000ms exceeded.\\n    at PlaywrightCrawler.requestHandler (/Users/chsa/Desktop/developments/ragnexus/src/crawlers/crawlee.ts:45:28)\\n    at /Users/chsa/Desktop/developments/ragnexus/node_modules/@crawlee/src/internals/browser-crawler.ts:590:50\\n    at wrap (/Users/chsa/Desktop/developments/ragnexus/node_modules/@apify/src/index.ts:77:33)\\n    at /Users/chsa/Desktop/developments/ragnexus/node_modules/@apify/src/index.ts:93:13\\n    at /Users/chsa/Desktop/developments/ragnexus/node_modules/@apify/src/index.ts:92:17\\n    at addTimeoutToPromise (/Users/chsa/Desktop/developments/ragnexus/node_modules/@apify/src/index.ts:85:12)\\n    at PlaywrightCrawler._runRequestHandler (/Users/chsa/Desktop/developments/ragnexus/node_modules/@crawlee/src/internals/browser-crawler.ts:589:38)\\n    at PlaywrightCrawler._runRequestHandler (/Users/chsa/Desktop/developments/ragnexus/node_modules/@crawlee/src/internals/playwright-crawler.ts:243:9)\\n    at wrap (/Users/chsa/Desktop/developments/ragnexus/node_modules/@apify/src/index.ts:77:27)\"],\"headers\":{},\"userData\":{\"__crawlee\":{\"state\":4}},\"handledAt\":\"2026-03-14T10:21:08.525Z\"}",
-	"method": "GET",
-	"orderNo": null,
-	"retryCount": 1,
-	"uniqueKey": "https://github.com/sipeed/picoclaw",
-	"url": "https://github.com/sipeed/picoclaw"
+  "id": "3DIsFxQQ8jQrRu9",
+  "json": "{\"id\":\"3DIsFxQQ8jQrRu9\",\"url\":\"https://github.com/sipeed/picoclaw\",\"loadedUrl\":\"https://github.com/sipeed/picoclaw\",\"uniqueKey\":\"https://github.com/sipeed/picoclaw\",\"method\":\"GET\",\"noRetry\":false,\"retryCount\":0,\"errorMessages\":[],\"headers\":{},\"userData\":{\"__crawlee\":{\"state\":4}},\"handledAt\":\"2026-03-14T09:47:57.757Z\"}",
+  "method": "GET",
+  "orderNo": null,
+  "retryCount": 0,
+  "uniqueKey": "https://github.com/sipeed/picoclaw",
+  "url": "https://github.com/sipeed/picoclaw"
 }
