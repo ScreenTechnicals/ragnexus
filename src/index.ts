@@ -9,6 +9,8 @@ export type * from "./types";
 
 // Utils
 export { sha256 } from "./utils/hash";
+export { withRetry } from "./utils/retry";
+export type { RetryOptions } from "./utils/retry";
 export { TextSplitter } from "./utils/text-splitter";
 export type { TextSplitterOptions } from "./utils/text-splitter";
 
