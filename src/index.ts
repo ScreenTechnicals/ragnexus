@@ -56,7 +56,7 @@ export type { CohereRerankerOptions } from "./rerankers/cohere";
 
 // Crawlers
 export { WebCrawler } from "./crawlers/crawlee";
-export type { CrawleeOptions } from "./crawlers/crawlee";
+export type { CrawleeOptions, CrawlWithLinksResult } from "./crawlers/crawlee";
 
 // Core exports
 export {

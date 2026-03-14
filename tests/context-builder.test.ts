@@ -81,11 +81,11 @@ describe("ContextBuilder", () => {
 
             // With docs
             const withDocs = builder.injectIntoMessages(msgs, "Be helpful", [], [doc("1", "info", 0.9)]);
-            expect(withDocs[0].content).toContain("prioritise the retrieved documents");
+            expect(withDocs[0].content).toContain("use ONLY the retrieved documents");
 
             // Without docs (just system prompt)
             const noDocs = builder.injectIntoMessages(msgs, "Be helpful", [], []);
-            expect(noDocs[0].content).not.toContain("prioritise the retrieved documents");
+            expect(noDocs[0].content).not.toContain("use ONLY the retrieved documents");
         });
 
         it("should inject memory facts sorted by importance", () => {

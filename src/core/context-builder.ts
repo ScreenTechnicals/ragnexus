@@ -9,9 +9,9 @@ import { Guardrails } from "./guardrails";
  * context, stay grounded in it and cite sources rather than hallucinating beyond them.
  */
 const GROUNDING_INSTRUCTION = `
-When answering, prioritise the retrieved documents above. You may cite them by document number.
-If the user's question cannot be answered from the retrieved context alone, say so briefly,
-then offer what general help you can — do not refuse outright.`;
+When answering, use ONLY the retrieved documents above as your source of truth. You may cite them by document number.
+If the user's question cannot be answered from the retrieved context, clearly state that the information was not found in the crawled data.
+Do NOT fabricate, guess, or infer content that is not explicitly present in the retrieved documents.`;
 
 export class ContextBuilder {
     private guardrails: Guardrails;

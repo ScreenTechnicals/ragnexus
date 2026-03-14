@@ -19,11 +19,11 @@ import {
 
 marked.setOptions({ renderer: new TerminalRenderer() as any });
 
-type Message = { role: 'user' | 'assistant' | 'system', content: string };
+type Message = { role: 'user' | 'assistant' | 'system' | 'tool', content: string, tool_call_id?: string };
 type Step = 'url-input' | 'scraping' | 'embedding' | 'chat';
 
 const openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
-const crawler = new WebCrawler({ headless: true, maxRequestsPerCrawl: 10 });
+const crawler = new WebCrawler({ headless: true, maxRequestsPerCrawl: 5 });
 const splitter = new TextSplitter({ chunkSize: 800, chunkOverlap: 100 });
 const embedder = new OpenAIEmbedder({ model: 'text-embedding-3-small' });
 const vectorStore = new InMemoryVectorStore(embedder);
@@ -31,9 +31,58 @@ const memoryStore = new InMemoryStore();
 const rag = createRag({
     storage: { vector: vectorStore, memory: memoryStore },
     embedder,
-    guardrails: { minRelevanceScore: 0.5, maxTokens: 3000 },
+    guardrails: { minRelevanceScore: 0.3, maxTokens: 4096 },
 });
 const openaiAdapter = new OpenAIAdapter(rag);
+
+// ─── State shared between renders ─────────────────────────────────────────────
+/** All links discovered from crawled pages — the model picks from these. */
+let discoveredLinks: string[] = [];
+/** URLs already crawled — to avoid re-crawling. */
+const crawledUrls = new Set<string>();
+
+// ─── Tool definition for OpenAI function calling ─────────────────────────────
+const CRAWL_TOOL: OpenAI.Chat.Completions.ChatCompletionTool = {
+    type: "function",
+    function: {
+        name: "crawl_page",
+        description:
+            "Crawl a specific URL to fetch its content. Use this when the user asks about something that is NOT in the retrieved context. Pick the most relevant URL from the available links.",
+        parameters: {
+            type: "object",
+            properties: {
+                url: {
+                    type: "string",
+                    description: "The full URL to crawl and add to the knowledge base.",
+                },
+                reason: {
+                    type: "string",
+                    description: "Brief reason why this page needs to be crawled.",
+                },
+            },
+            required: ["url"],
+        },
+    },
+};
+
+async function crawlAndEmbed(url: string): Promise<number> {
+    if (crawledUrls.has(url)) return 0;
+
+    const result = await crawler.scrapeWithLinks([url]);
+    crawledUrls.add(url);
+
+    // Add any newly discovered links
+    for (const link of result.links) {
+        if (!discoveredLinks.includes(link)) {
+            discoveredLinks.push(link);
+        }
+    }
+
+    if (!result.docs.length) return 0;
+    const chunks = splitter.splitDocuments(result.docs);
+    const upsertResult = await rag.upsertDocuments(chunks);
+    return upsertResult.added + upsertResult.updated;
+}
 
 function parseUrls(raw: string): string[] {
     return raw.trim().split(/\s+/).filter(Boolean).map(u =>
@@ -60,30 +109,48 @@ const App = () => {
     const [error, setError] = useState<string | null>(null);
     const [statusMsg, setStatusMsg] = useState('');
 
-    const loadUrls = useCallback(async (urls: string[]) => {
-        setStep('scraping');
-        setStatusMsg(`Crawling ${urls.length} URL(s)…`);
-        const docs = await crawler.scrapeBatch(urls);
-        if (!docs.length) throw new Error('No text extracted from the provided URL(s).');
-        setStep('embedding');
-        setStatusMsg(`Chunking & embedding ${docs.length} page(s)…`);
-        const chunks = splitter.splitDocuments(docs);
-        const result = await rag.upsertDocuments(chunks);
-        setDocCount(n => n + result.added + result.updated);
-        setLoadedUrls(prev => [...prev, ...urls]);
-        return result;
-    }, []);
-
     const handleUrlSubmit = useCallback(async (raw: string) => {
         if (!openai) { setError('❌ Missing OPENAI_API_KEY.'); return; }
         const urls = parseUrls(raw);
         if (!urls.length) return;
         try {
-            const result = await loadUrls(urls);
-            setMessages([{ role: 'system', content: `You are a helpful assistant. Loaded ${result.added} document chunks from: ${urls.join(', ')}` }]);
+            setStep('scraping');
+            setStatusMsg(`Crawling ${urls.length} URL(s)…`);
+
+            // Crawl seed page AND collect all links from it
+            const result = await crawler.scrapeWithLinks(urls);
+            for (const u of urls) crawledUrls.add(u);
+            discoveredLinks = result.links;
+
+            if (!result.docs.length) throw new Error('No text extracted.');
+
+            setStep('embedding');
+            setStatusMsg(`Embedding ${result.docs.length} page(s)…`);
+            const chunks = splitter.splitDocuments(result.docs);
+            const upsertResult = await rag.upsertDocuments(chunks);
+            setDocCount(upsertResult.added + upsertResult.updated);
+            setLoadedUrls(urls);
+
+            // System prompt: grounded + tells model about crawl_page tool
+            const linksPreview = discoveredLinks.slice(0, 30).map(l => `  - ${l}`).join('\n');
+            setMessages([{
+                role: 'system',
+                content: `You are a helpful assistant that answers questions based ONLY on crawled web content.
+
+RULES:
+- Answer ONLY from the retrieved context documents. NEVER fabricate or guess content.
+- If the answer is NOT in the retrieved context, use the crawl_page tool to fetch the relevant page first.
+- After crawling, answer from the newly retrieved data.
+
+Available pages you can crawl (discovered links from the seed page):
+${linksPreview}${discoveredLinks.length > 30 ? `\n  ... and ${discoveredLinks.length - 30} more` : ''}
+
+Loaded ${upsertResult.added} initial chunks from: ${urls.join(', ')}`
+            }]);
+
             setStep('chat');
         } catch (e: any) { setError(`❌ ${e.message}`); }
-    }, [loadUrls]);
+    }, []);
 
     const handleChat = useCallback(async (query: string) => {
         if (!query.trim() || isGenerating) return;
@@ -94,9 +161,11 @@ const App = () => {
             if (!urls.length) return;
             setInput('');
             setIsGenerating(true);
+            setStatusMsg('Crawling…');
             try {
-                const result = await loadUrls(urls);
-                setMessages(prev => [...prev, { role: 'assistant', content: `✅ Loaded ${result.added} new chunks from ${urls.map(shortUrl).join(', ')}.` }]);
+                const added = await crawlAndEmbed(urls[0]);
+                setDocCount(n => n + added);
+                setMessages(prev => [...prev, { role: 'assistant', content: `✅ Loaded ${added} new chunks from ${shortUrl(urls[0])}.` }]);
             } catch (e: any) {
                 setMessages(prev => [...prev, { role: 'assistant', content: `❌ ${e.message}` }]);
             }
@@ -112,19 +181,98 @@ const App = () => {
         setCurrentStream('');
 
         try {
+            // Build RAG context
             const payload = await openaiAdapter.getCompletionConfig(
-                { model: 'gpt-4o-mini', messages: newMessages, stream: true }, { memory: false }
+                { model: 'gpt-4o-mini', messages: newMessages, stream: true, tools: [CRAWL_TOOL] },
+                { memory: false }
             );
-            const stream = await openai!.chat.completions.create(payload as any) as any;
-            let full = '';
-            for await (const chunk of stream) {
-                full += chunk.choices[0]?.delta?.content || '';
-                setCurrentStream(full);
+
+            let currentMessages = payload.messages;
+            let finalContent = '';
+
+            // Agentic loop: keep going while the model wants to call tools
+            while (true) {
+                const stream = await openai!.chat.completions.create({
+                    ...payload,
+                    messages: currentMessages,
+                    stream: true,
+                } as any) as any;
+
+                let full = '';
+                let toolCalls: any[] = [];
+
+                for await (const chunk of stream) {
+                    const delta = chunk.choices[0]?.delta;
+
+                    // Accumulate text content
+                    if (delta?.content) {
+                        full += delta.content;
+                        setCurrentStream(full);
+                    }
+
+                    // Accumulate tool calls
+                    if (delta?.tool_calls) {
+                        for (const tc of delta.tool_calls) {
+                            if (tc.index !== undefined) {
+                                if (!toolCalls[tc.index]) {
+                                    toolCalls[tc.index] = { id: tc.id || '', function: { name: '', arguments: '' } };
+                                }
+                                if (tc.id) toolCalls[tc.index].id = tc.id;
+                                if (tc.function?.name) toolCalls[tc.index].function.name += tc.function.name;
+                                if (tc.function?.arguments) toolCalls[tc.index].function.arguments += tc.function.arguments;
+                            }
+                        }
+                    }
+                }
+
+                // If no tool calls, we're done
+                if (!toolCalls.length) {
+                    finalContent = full;
+                    break;
+                }
+
+                // Process tool calls
+                const assistantMsg: any = { role: 'assistant', content: full || null, tool_calls: toolCalls };
+                currentMessages = [...currentMessages, assistantMsg];
+
+                for (const tc of toolCalls) {
+                    if (tc.function.name === 'crawl_page') {
+                        let args: any;
+                        try { args = JSON.parse(tc.function.arguments); } catch { args = {}; }
+                        const url = args.url;
+
+                        setCurrentStream(`🔍 Crawling ${shortUrl(url)}…`);
+
+                        let toolResult: string;
+                        try {
+                            const added = await crawlAndEmbed(url);
+                            setDocCount(n => n + added);
+                            toolResult = `Successfully crawled ${url}. Added ${added} new chunks to the knowledge base. Now re-query the retrieved context to answer the user's question.`;
+                        } catch (e: any) {
+                            toolResult = `Failed to crawl ${url}: ${e.message}`;
+                        }
+
+                        currentMessages.push({
+                            role: 'tool' as any,
+                            tool_call_id: tc.id,
+                            content: toolResult,
+                        });
+                    }
+                }
+
+                // After processing tools, rebuild RAG context with new data
+                const refreshedPayload = await openaiAdapter.getCompletionConfig(
+                    { model: 'gpt-4o-mini', messages: currentMessages, stream: true, tools: [CRAWL_TOOL] },
+                    { memory: false }
+                );
+                currentMessages = refreshedPayload.messages;
+                setCurrentStream('');
             }
-            setMessages([...newMessages, { role: 'assistant', content: full }]);
+
+            setMessages([...newMessages, { role: 'assistant', content: finalContent }]);
         } catch (e: any) { setError(`Error: ${e.message}`); }
         finally { setIsGenerating(false); setCurrentStream(''); }
-    }, [messages, isGenerating, docCount, loadUrls]);
+    }, [messages, isGenerating, docCount]);
 
     if (error) return <Box padding={1}><Text color="red">{error}</Text></Box>;
 
@@ -158,7 +306,7 @@ const App = () => {
             <Box flexDirection="column" borderStyle="round" borderColor="green" paddingX={2} paddingY={0}>
                 <Box gap={2}>
                     <Text color="green" bold>🤖 RagNexus — OpenAI</Text>
-                    <Text color="gray">{docCount} chunks · {loadedUrls.length} source(s)</Text>
+                    <Text color="gray">{docCount} chunks · {discoveredLinks.length} discoverable links</Text>
                 </Box>
                 {loadedUrls.map(u => <Text key={u} color="gray" dimColor>  {shortUrl(u)}</Text>)}
             </Box>
