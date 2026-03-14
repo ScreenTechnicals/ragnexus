@@ -1,11 +1,22 @@
 import { ContextBuilder } from "./core/context-builder";
 import { GuardrailOptions, Guardrails } from "./core/guardrails";
-import { createRag, RAGEngine, RAGEngineConfig } from "./core/rag-engine";
+import { createRag, RAGEngine, RAGEngineConfig, RAGEngineEvents } from "./core/rag-engine";
 import { MemoryManager } from "./memory/memory-manager";
 import { Retriever, RetrieverOptions } from "./retrieval/retriever";
 
 // Types
 export type * from "./types";
+
+// Errors
+export {
+    CrawlError,
+    EmbeddingError,
+    GuardrailError,
+    MemoryStoreError,
+    RagNexusError,
+    RerankerError,
+    VectorStoreError
+} from "./errors";
 
 // Utils
 export { sha256 } from "./utils/hash";
@@ -60,6 +71,7 @@ export {
 export type {
     GuardrailOptions,
     RAGEngineConfig,
+    RAGEngineEvents,
     RetrieverOptions
 };
 

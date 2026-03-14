@@ -1,3 +1,4 @@
+import { CrawlError } from "../errors";
 import { RAGDocument } from "../types";
 import { sha256 } from "../utils/hash";
 
@@ -33,7 +34,7 @@ export class Firecrawler {
 
         if (!res.ok) {
             let errorText = await res.text().catch(() => "");
-            throw new Error(`Firecrawl scrape failed: ${res.statusText} - ${errorText}`);
+            throw new CrawlError(`Firecrawl scrape failed: ${res.statusText} - ${errorText}`, { url });
         }
 
         const data = await res.json();
@@ -41,7 +42,7 @@ export class Firecrawler {
         const metadata = data?.data?.metadata;
 
         if (!markdown) {
-            throw new Error("No markdown returned from Firecrawl");
+            throw new CrawlError("No markdown returned from Firecrawl", { url });
         }
 
         return {

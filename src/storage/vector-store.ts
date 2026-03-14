@@ -1,5 +1,13 @@
+import { readFile, writeFile } from "node:fs/promises";
 import { Embedder, RAGDocument, SearchMode, UpsertResult, VectorStore } from "../types";
 import { sha256 } from "../utils/hash";
+
+/** Shape of the JSON snapshot written by save(). */
+interface VectorStoreSnapshot {
+    version: 1;
+    docs: RAGDocument[];
+    vectors: Record<string, number[]>;
+}
 
 export class InMemoryVectorStore implements VectorStore {
     private docs: RAGDocument[] = [];
@@ -14,6 +22,44 @@ export class InMemoryVectorStore implements VectorStore {
     constructor(embedder: Embedder) {
         this.embedder = embedder;
         this.bm25 = new IncrementalBM25();
+    }
+
+    // ─── Persistence ─────────────────────────────────────────────────────────
+
+    /**
+     * Save the entire store (docs + vectors) to a JSON file.
+     * No re-embedding needed on load.
+     */
+    public async save(path: string): Promise<void> {
+        const snapshot: VectorStoreSnapshot = {
+            version: 1,
+            docs: this.docs,
+            vectors: Object.fromEntries(this.documentVectors),
+        };
+        await writeFile(path, JSON.stringify(snapshot), "utf-8");
+    }
+
+    /**
+     * Load a previously saved store from a JSON file.
+     * Returns a fully hydrated InMemoryVectorStore — no re-embedding required.
+     */
+    public static async load(path: string, embedder: Embedder): Promise<InMemoryVectorStore> {
+        const raw = await readFile(path, "utf-8");
+        const snapshot: VectorStoreSnapshot = JSON.parse(raw);
+
+        const store = new InMemoryVectorStore(embedder);
+        for (let i = 0; i < snapshot.docs.length; i++) {
+            const doc = snapshot.docs[i];
+            store.docs.push(doc);
+            store.docIndex.set(doc.id, i);
+            store.bm25.addDoc(doc);
+
+            const vec = snapshot.vectors[doc.id];
+            if (vec) {
+                store.documentVectors.set(doc.id, vec);
+            }
+        }
+        return store;
     }
 
     // ─── Private helpers ─────────────────────────────────────────────────────

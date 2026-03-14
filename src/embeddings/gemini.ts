@@ -1,3 +1,4 @@
+import { EmbeddingError } from "../errors";
 import { Embedder } from "../types";
 import { RetryOptions, withRetry } from "../utils/retry";
 
@@ -41,7 +42,7 @@ export class GeminiEmbedder implements Embedder {
             );
 
             if (!res.ok) {
-                throw new Error(`Gemini Embedding failed: ${res.status} ${res.statusText}`);
+                throw new EmbeddingError(`Gemini Embedding failed: ${res.status} ${res.statusText}`, { statusCode: res.status });
             }
 
             const data = await res.json();

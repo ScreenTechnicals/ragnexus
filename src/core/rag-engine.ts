@@ -1,8 +1,23 @@
+import { EventEmitter } from "node:events";
+import { VectorStoreError } from "../errors";
 import { MemoryManager } from "../memory/memory-manager";
 import { Retriever } from "../retrieval/retriever";
 import { Embedder, MemoryStore, RAGDocument, RAGMessage, RAGQueryOptions, Reranker, UpsertResult, VectorStore } from "../types";
 import { ContextBuilder } from "./context-builder";
 import { GuardrailOptions, Guardrails } from "./guardrails";
+
+// ─── Event types ─────────────────────────────────────────────────────────────
+
+export interface RAGEngineEvents {
+    /** Emitted after retrieval with the filtered docs (before context injection). */
+    retrieve: [docs: RAGDocument[]];
+    /** Emitted after upsert with the result stats. */
+    upsert: [result: UpsertResult];
+    /** Emitted when guardrails reject a document (with the rejected doc and reason). */
+    "guardrail:reject": [doc: RAGDocument, reason: string];
+}
+
+// ─── Config ──────────────────────────────────────────────────────────────────
 
 export interface RAGEngineConfig {
     storage: {
@@ -21,31 +36,40 @@ export interface RAGEngineConfig {
      */
     reranker?: Reranker;
     /**
+     * @deprecated Use `engine.on('retrieve', fn)` instead.
      * Observability hook — called after retrieval with the final filtered docs.
      */
     onRetrieve?: (docs: RAGDocument[]) => void;
 }
 
-export class RAGEngine {
+// ─── Engine ──────────────────────────────────────────────────────────────────
+
+export class RAGEngine extends EventEmitter<RAGEngineEvents> {
     private vectorStore?: VectorStore;
     private memoryManager?: MemoryManager;
     private embedder: Embedder;
-    private onRetrieve?: (docs: RAGDocument[]) => void;
 
     public guardrails: Guardrails;
     public contextBuilder: ContextBuilder;
     public retriever?: Retriever;
 
     constructor(config: RAGEngineConfig) {
+        super();
+
         this.vectorStore = config.storage.vector ?? config.storage.vectorModel;
         this.embedder = config.embedder;
-        this.onRetrieve = config.onRetrieve;
+
+        // Backward compat: wire legacy onRetrieve callback into the event emitter
+        if (config.onRetrieve) {
+            this.on("retrieve", config.onRetrieve);
+        }
 
         if (config.storage.memory) {
             this.memoryManager = new MemoryManager(config.storage.memory);
         }
 
         this.guardrails = new Guardrails(config.guardrails);
+        this.guardrails.onReject = (doc, reason) => this.emit("guardrail:reject", doc, reason);
         this.contextBuilder = new ContextBuilder(this.guardrails);
 
         if (this.vectorStore) {
@@ -77,9 +101,9 @@ export class RAGEngine {
             retrievedDocs = await this.retriever.retrieve(query, { topK, searchMode, alpha });
         }
 
-        // Fire observability hook if configured
-        if (this.onRetrieve && retrievedDocs.length > 0) {
-            this.onRetrieve(retrievedDocs);
+        // Fire retrieve event
+        if (retrievedDocs.length > 0) {
+            this.emit("retrieve", retrievedDocs);
         }
 
         return this.contextBuilder.injectIntoMessages(
@@ -96,7 +120,7 @@ export class RAGEngine {
      * change-detection / replace semantics.
      */
     public async addDocuments(docs: Omit<RAGDocument, "score">[]): Promise<void> {
-        if (!this.vectorStore) throw new Error("VectorStore not configured.");
+        if (!this.vectorStore) throw new VectorStoreError("VectorStore not configured.");
         await this.vectorStore.add(docs as RAGDocument[]);
     }
 
@@ -107,15 +131,17 @@ export class RAGEngine {
      * - add    : new document → embed and insert
      */
     public async upsertDocuments(docs: Omit<RAGDocument, "score">[]): Promise<UpsertResult> {
-        if (!this.vectorStore) throw new Error("VectorStore not configured.");
-        return this.vectorStore.upsert(docs as RAGDocument[]);
+        if (!this.vectorStore) throw new VectorStoreError("VectorStore not configured.");
+        const result = await this.vectorStore.upsert(docs as RAGDocument[]);
+        this.emit("upsert", result);
+        return result;
     }
 
     /**
      * Remove documents from the vector store by id.
      */
     public async removeDocuments(ids: string[]): Promise<void> {
-        if (!this.vectorStore) throw new Error("VectorStore not configured.");
+        if (!this.vectorStore) throw new VectorStoreError("VectorStore not configured.");
         await this.vectorStore.delete(ids);
     }
 }

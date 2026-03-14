@@ -1,3 +1,4 @@
+import { EmbeddingError } from "../errors";
 import { Embedder } from "../types";
 import { RetryOptions, withRetry } from "../utils/retry";
 
@@ -32,7 +33,7 @@ export class OllamaEmbedder implements Embedder {
             });
 
             if (!res.ok) {
-                throw new Error(`Ollama Embedding failed: ${res.status} ${res.statusText}`);
+                throw new EmbeddingError(`Ollama Embedding failed: ${res.status} ${res.statusText}`, { statusCode: res.status });
             }
 
             const data = await res.json();

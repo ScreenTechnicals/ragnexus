@@ -1,4 +1,5 @@
 import { CohereClientV2 } from "cohere-ai";
+import { RerankerError } from "../errors";
 import { RAGDocument, Reranker } from "../types";
 import { RetryOptions, withRetry } from "../utils/retry";
 
@@ -36,7 +37,7 @@ export class CohereReranker implements Reranker {
     constructor(options: CohereRerankerOptions = {}) {
         const apiKey = options.apiKey ?? process.env.COHERE_API_KEY;
         if (!apiKey) {
-            throw new Error(
+            throw new RerankerError(
                 "CohereReranker requires an API key. Pass apiKey or set COHERE_API_KEY."
             );
         }

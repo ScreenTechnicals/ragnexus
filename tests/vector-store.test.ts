@@ -1,4 +1,7 @@
-import { describe, it, expect, vi } from "vitest";
+import { existsSync, unlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { InMemoryVectorStore } from "../src/storage/vector-store";
 import { Embedder, RAGDocument } from "../src/types";
 
@@ -210,6 +213,70 @@ describe("InMemoryVectorStore", () => {
             const results = await store.searchByText("python framework", 5, "hybrid", 0.5);
             expect(results.length).toBeGreaterThan(0);
             expect(results.every(r => r.score !== undefined)).toBe(true);
+        });
+    });
+
+    describe("save / load", () => {
+        const tmpPath = join(tmpdir(), `ragnexus-test-${Date.now()}.json`);
+
+        afterEach(() => {
+            if (existsSync(tmpPath)) unlinkSync(tmpPath);
+        });
+
+        it("should save and load a store with identical search results", async () => {
+            const embedder = createMockEmbedder();
+            const store = new InMemoryVectorStore(embedder);
+            await store.add([
+                doc("1", "machine learning algorithms"),
+                doc("2", "cooking recipes for dinner"),
+                doc("3", "deep learning neural networks"),
+            ]);
+
+            // Search before save
+            const queryVec = await embedder.embed("learning");
+            const beforeResults = await store.search(queryVec, 3);
+
+            // Save and load
+            await store.save(tmpPath);
+            const loaded = await InMemoryVectorStore.load(tmpPath, embedder);
+
+            // Search after load — should produce identical results
+            const afterResults = await loaded.search(queryVec, 3);
+            expect(afterResults.map(r => r.id)).toEqual(beforeResults.map(r => r.id));
+            expect(afterResults.map(r => r.text)).toEqual(beforeResults.map(r => r.text));
+        });
+
+        it("should preserve upsert change detection after load", async () => {
+            const embedder = createMockEmbedder();
+            const store = new InMemoryVectorStore(embedder);
+            await store.upsert([doc("1", "original text")]);
+
+            await store.save(tmpPath);
+            const loaded = await InMemoryVectorStore.load(tmpPath, embedder);
+
+            // Same content → should skip
+            const result = await loaded.upsert([doc("1", "original text")]);
+            expect(result.skipped).toBe(1);
+
+            // Changed content → should update
+            const result2 = await loaded.upsert([doc("1", "updated text")]);
+            expect(result2.updated).toBe(1);
+        });
+
+        it("should support keyword search after load", async () => {
+            const embedder = createMockEmbedder();
+            const store = new InMemoryVectorStore(embedder);
+            await store.add([
+                doc("1", "machine learning algorithms"),
+                doc("2", "cooking recipes"),
+            ]);
+
+            await store.save(tmpPath);
+            const loaded = await InMemoryVectorStore.load(tmpPath, embedder);
+
+            const results = await loaded.searchByText("learning", 5, "keyword");
+            expect(results.length).toBeGreaterThan(0);
+            expect(results[0].id).toBe("1");
         });
     });
 });

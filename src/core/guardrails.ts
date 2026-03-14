@@ -50,6 +50,8 @@ function countTokens(text: string): number {
 
 export class Guardrails {
     private options: Required<GuardrailOptions>;
+    /** Optional callback invoked when a doc is rejected. */
+    public onReject?: (doc: RAGDocument, reason: string) => void;
 
     constructor(options?: GuardrailOptions) {
         this.options = {
@@ -117,9 +119,13 @@ ${docsText}
 
     /** Layer 3: Relevance threshold filter */
     public filterRelevance(docs: RAGDocument[]): RAGDocument[] {
-        return docs.filter(doc =>
-            doc.score === undefined || doc.score >= this.options.minRelevanceScore
-        );
+        return docs.filter(doc => {
+            if (doc.score !== undefined && doc.score < this.options.minRelevanceScore) {
+                this.onReject?.(doc, `relevance ${(doc.score * 100).toFixed(0)}% below ${(this.options.minRelevanceScore * 100).toFixed(0)}% threshold`);
+                return false;
+            }
+            return true;
+        });
     }
 
     /** Layer 4: Density-based whole-document rejection */
@@ -136,10 +142,9 @@ ${docsText}
 
             const density = matchCount / wordCount;
             if (density > this.options.maxPatternDensity) {
-                console.warn(
-                    `[Guardrails] Rejected "${doc.id}" — pattern density ` +
-                    `${(density * 100).toFixed(1)}% > ${(this.options.maxPatternDensity * 100).toFixed(0)}% threshold.`
-                );
+                const reason = `pattern density ${(density * 100).toFixed(1)}% exceeds ${(this.options.maxPatternDensity * 100).toFixed(0)}% threshold`;
+                console.warn(`[Guardrails] Rejected "${doc.id}" — ${reason}.`);
+                this.onReject?.(doc, reason);
                 return false;
             }
             return true;

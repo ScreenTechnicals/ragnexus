@@ -1,3 +1,4 @@
+import { EmbeddingError } from "../errors";
 import { Embedder } from "../types";
 import { RetryOptions, withRetry } from "../utils/retry";
 
@@ -40,7 +41,7 @@ export class OpenAIEmbedder implements Embedder {
             });
 
             if (!res.ok) {
-                throw new Error(`OpenAI Embedding failed: ${res.status} ${res.statusText}`);
+                throw new EmbeddingError(`OpenAI Embedding failed: ${res.status} ${res.statusText}`, { statusCode: res.status });
             }
 
             const data = await res.json();
@@ -63,7 +64,7 @@ export class OpenAIEmbedder implements Embedder {
             });
 
             if (!res.ok) {
-                throw new Error(`OpenAI Embedding failed: ${res.status} ${res.statusText}`);
+                throw new EmbeddingError(`OpenAI Embedding failed: ${res.status} ${res.statusText}`, { statusCode: res.status });
             }
 
             const data = await res.json();
