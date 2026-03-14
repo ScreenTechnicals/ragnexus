@@ -4,7 +4,7 @@ import 'dotenv/config';
 import { Box, render, Text } from 'ink';
 import Spinner from 'ink-spinner';
 import TextInput from 'ink-text-input';
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
     createRag,
     InMemoryStore,
@@ -16,132 +16,156 @@ import {
 } from "../src";
 
 type Message = { role: 'user' | 'assistant' | 'system', content: string };
+type Step = 'url-input' | 'scraping' | 'embedding' | 'chat';
 
-const TARGET_URL = process.env.TARGET_URL || "https://github.com/microsoft/TypeScript";
-
-// Setup singletons outside component
 const openaiProvider = process.env.OPENAI_API_KEY ? createOpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
-const crawler = new WebCrawler({ headless: true, maxRequestsPerCrawl: 5 });
+const crawler = new WebCrawler({ headless: true, maxRequestsPerCrawl: 10 });
 const splitter = new TextSplitter({ chunkSize: 800, chunkOverlap: 100 });
-const embedder = new OllamaEmbedder({ model: "nomic-embed-text" });
+const embedder = new OllamaEmbedder({ model: 'nomic-embed-text' });
 const vectorStore = new InMemoryVectorStore(embedder);
 const memoryStore = new InMemoryStore();
 const rag = createRag({
     storage: { vector: vectorStore, memory: memoryStore },
     embedder,
-    guardrails: { minRelevanceScore: 0.5, maxTokens: 3000 }
+    guardrails: { minRelevanceScore: 0.5, maxTokens: 3000 },
 });
 const vercelAIAdapter = new VercelAIAdapter(rag);
 
+function parseUrls(raw: string): string[] {
+    return raw.trim().split(/\s+/).filter(Boolean).map(u =>
+        u.startsWith('http') ? u : `https://${u}`
+    );
+}
+function shortUrl(url: string): string {
+    try {
+        const u = new URL(url);
+        const path = u.pathname.length > 40 ? u.pathname.slice(0, 38) + '…' : u.pathname;
+        return u.hostname + path;
+    } catch { return url.slice(0, 60); }
+}
+
 const App = () => {
-    const [step, setStep] = useState<'init' | 'scraping' | 'embedding' | 'chat'>('init');
-    const [messages, setMessages] = useState<Message[]>([
-        { role: 'system', content: `You are a helpful programming assistant summarizing a GitHub repository: ${TARGET_URL}` }
-    ]);
+    const [step, setStep] = useState<Step>('url-input');
+    const [urlInput, setUrlInput] = useState('');
+    const [loadedUrls, setLoadedUrls] = useState<string[]>([]);
+    const [docCount, setDocCount] = useState(0);
+    const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState('');
     const [isGenerating, setIsGenerating] = useState(false);
     const [currentStream, setCurrentStream] = useState('');
     const [error, setError] = useState<string | null>(null);
+    const [statusMsg, setStatusMsg] = useState('');
 
-    useEffect(() => {
-        if (!openaiProvider) {
-            setError("❌ ERROR: Missing OPENAI_API_KEY for Vercel AI provider.");
+    const loadUrls = useCallback(async (urls: string[]) => {
+        setStep('scraping');
+        setStatusMsg(`Crawling ${urls.length} URL(s)…`);
+        const docs = await crawler.scrapeBatch(urls);
+        if (!docs.length) throw new Error('No text extracted from the provided URL(s).');
+        setStep('embedding');
+        setStatusMsg(`Chunking & embedding ${docs.length} page(s)…`);
+        const chunks = splitter.splitDocuments(docs);
+        const result = await rag.upsertDocuments(chunks);
+        setDocCount(n => n + result.added + result.updated);
+        setLoadedUrls(prev => [...prev, ...urls]);
+        return result;
+    }, []);
+
+    const handleUrlSubmit = useCallback(async (raw: string) => {
+        if (!openaiProvider) { setError('❌ Missing OPENAI_API_KEY for Vercel AI provider.'); return; }
+        const urls = parseUrls(raw);
+        if (!urls.length) return;
+        try {
+            const result = await loadUrls(urls);
+            setMessages([{ role: 'system', content: `You are a helpful assistant. Loaded ${result.added} document chunks from: ${urls.join(', ')}` }]);
+            setStep('chat');
+        } catch (e: any) { setError(`❌ ${e.message}`); }
+    }, [loadUrls]);
+
+    const handleChat = useCallback(async (query: string) => {
+        if (!query.trim() || isGenerating) return;
+        if (query.toLowerCase() === 'exit') process.exit(0);
+
+        if (query.startsWith('/add ')) {
+            const urls = parseUrls(query.slice(5));
+            if (!urls.length) return;
+            setInput('');
+            setIsGenerating(true);
+            try {
+                const result = await loadUrls(urls);
+                setMessages(prev => [...prev, { role: 'assistant', content: `✅ Loaded ${result.added} new chunks from ${urls.map(shortUrl).join(', ')}.` }]);
+            } catch (e: any) {
+                setMessages(prev => [...prev, { role: 'assistant', content: `❌ ${e.message}` }]);
+            }
+            setStep('chat');
+            setIsGenerating(false);
             return;
         }
 
-        const initRag = async () => {
-            try {
-                setStep('scraping');
-                const docs = await crawler.scrapeBatch([TARGET_URL]);
-
-                if (docs.length === 0 || !docs[0].text) {
-                    setError("❌ Failed to extract any text from the repository.");
-                    return;
-                }
-
-                setStep('embedding');
-                await rag.addDocuments(splitter.splitDocuments(docs));
-
-                setStep('chat');
-            } catch (e: any) {
-                setError(`Initialization Failed: ${e.message}`);
-            }
-        };
-        initRag();
-    }, []);
-
-    const handleSubmit = async (query: string) => {
-        if (!query.trim() || isGenerating) return;
-        if (query.toLowerCase() === 'exit') {
-            process.exit(0);
-        }
-
-        const newMessages = [...messages, { role: 'user' as const, content: query }];
+        const newMessages: Message[] = [...messages, { role: 'user', content: query }];
         setMessages(newMessages);
         setInput('');
         setIsGenerating(true);
         setCurrentStream('');
 
         try {
-            // VercelAIAdapter wraps the streamText call
             const result = await vercelAIAdapter.streamTextWithContext(
                 streamText,
-                {
-                    model: openaiProvider!('gpt-4o-mini'),
-                    messages: newMessages as any,
-                },
+                { model: openaiProvider!('gpt-4o-mini'), messages: newMessages as any },
                 { memory: false }
             );
-
-            let fullContent = '';
-            for await (const textPart of result.textStream) {
-                fullContent += textPart;
-                setCurrentStream(fullContent);
+            let full = '';
+            for await (const part of result.textStream) {
+                full += part;
+                setCurrentStream(full);
             }
+            setMessages([...newMessages, { role: 'assistant', content: full }]);
+        } catch (e: any) { setError(`Error: ${e.message}`); }
+        finally { setIsGenerating(false); setCurrentStream(''); }
+    }, [messages, isGenerating, docCount, loadUrls]);
 
-            setMessages([...newMessages, { role: 'assistant', content: fullContent }]);
-            setIsGenerating(false);
-            setCurrentStream('');
-        } catch (err: any) {
-            setError(`Error generating response: ${err.message}`);
-            setIsGenerating(false);
-        }
-    };
+    if (error) return <Box padding={1}><Text color="red">{error}</Text></Box>;
 
-    if (error) {
-        return <Text color="red">{error}</Text>;
-    }
-
-    if (step === 'init' || step === 'scraping') {
-        return (
-            <Box>
-                <Text color="cyan"><Spinner type="dots" /></Text>
-                <Text color="blueBright"> Crawling repository: {TARGET_URL} (This may take 10-15s)...</Text>
+    if (step === 'url-input') return (
+        <Box flexDirection="column" gap={1} paddingY={1}>
+            <Box flexDirection="column" borderStyle="round" borderColor="yellow" paddingX={2} paddingY={1}>
+                <Text color="yellow" bold>⚡ RagNexus — Vercel AI (Ollama Embed)</Text>
+                <Text color="gray">Paste one or more URLs separated by spaces, then press Enter.</Text>
+                <Text color="gray" dimColor>Supports: GitHub, docs, blog posts, any public page</Text>
             </Box>
-        );
-    }
-
-    if (step === 'embedding') {
-        return (
-            <Box>
-                <Text color="magenta"><Spinner type="dots" /></Text>
-                <Text color="magentaBright"> Creating Ollama embeddings (ensure Ollama is running)...</Text>
+            <Box marginTop={1} gap={1}>
+                <Text color="blueBright" bold>URL(s)›</Text>
+                <TextInput value={urlInput} onChange={setUrlInput} onSubmit={handleUrlSubmit}
+                    placeholder="https://github.com/owner/repo  https://another-url.com" />
             </Box>
-        );
-    }
+        </Box>
+    );
+
+    if (step === 'scraping' || step === 'embedding') return (
+        <Box flexDirection="column" gap={1} paddingY={1}>
+            <Box gap={1}>
+                <Text color="yellow"><Spinner type="dots" /></Text>
+                <Text color="yellowBright">{statusMsg}</Text>
+            </Box>
+            {loadedUrls.map(u => <Text key={u} color="gray" dimColor>  ✓ {shortUrl(u)}</Text>)}
+        </Box>
+    );
 
     return (
         <Box flexDirection="column" gap={1} paddingY={1}>
-            <Box flexDirection="column" borderStyle="round" borderColor="cyan" paddingX={2}>
-                <Text color="cyan" bold>RagNexus Terminal (Vercel AI + Ollama)</Text>
-                <Text color="gray">Repository: {TARGET_URL}</Text>
+            <Box flexDirection="column" borderStyle="round" borderColor="yellow" paddingX={2} paddingY={0}>
+                <Box gap={2}>
+                    <Text color="yellow" bold>⚡ RagNexus — Vercel AI</Text>
+                    <Text color="gray">{docCount} chunks · {loadedUrls.length} source(s)</Text>
+                </Box>
+                {loadedUrls.map(u => <Text key={u} color="gray" dimColor>  {shortUrl(u)}</Text>)}
             </Box>
+            <Text color="gray" dimColor>  Tip: <Text color="yellow">/add &lt;url&gt;</Text> to load more · <Text color="yellow">exit</Text> to quit</Text>
 
             <Box flexDirection="column" marginTop={1}>
                 {messages.filter(m => m.role !== 'system').map((m, i) => (
                     <Box key={i} flexDirection="column" marginBottom={1}>
-                        <Text color={m.role === 'user' ? 'blueBright' : 'greenBright'} bold>
-                            {m.role === 'user' ? 'You' : 'AI SDK'}:
+                        <Text color={m.role === 'user' ? 'blueBright' : 'yellowBright'} bold>
+                            {m.role === 'user' ? 'You' : 'AI SDK'}
                         </Text>
                         <Text>{m.content}</Text>
                     </Box>
@@ -150,27 +174,18 @@ const App = () => {
 
             {isGenerating && (
                 <Box flexDirection="column" marginBottom={1}>
-                    <Text color="greenBright" bold>AI SDK:</Text>
-                    {currentStream.length > 0 ? (
-                        <Text>{currentStream}</Text>
-                    ) : (
-                        <Box>
-                            <Text color="yellow"><Spinner type="dots" /></Text>
-                            <Text color="gray"> Thinking...</Text>
-                        </Box>
+                    <Text color="yellowBright" bold>AI SDK</Text>
+                    {currentStream ? <Text>{currentStream}</Text> : (
+                        <Box gap={1}><Text color="yellow"><Spinner type="dots" /></Text><Text color="gray">Thinking…</Text></Box>
                     )}
                 </Box>
             )}
 
             {!isGenerating && (
-                <Box marginTop={1}>
-                    <Text color="blueBright" bold>You: </Text>
-                    <TextInput
-                        value={input}
-                        onChange={setInput}
-                        onSubmit={handleSubmit}
-                        placeholder="Ask a question about the repo... (type 'exit' to quit)"
-                    />
+                <Box marginTop={1} gap={1}>
+                    <Text color="blueBright" bold>You›</Text>
+                    <TextInput value={input} onChange={setInput} onSubmit={handleChat}
+                        placeholder="Ask anything… or /add <url>" />
                 </Box>
             )}
         </Box>

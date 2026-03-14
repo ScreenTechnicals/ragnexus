@@ -3,7 +3,7 @@ import 'dotenv/config';
 import { Box, render, Text } from 'ink';
 import Spinner from 'ink-spinner';
 import TextInput from 'ink-text-input';
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
     createRag,
     GeminiAdapter,
@@ -15,166 +15,239 @@ import {
 } from "../src";
 
 type Message = { role: 'user' | 'assistant' | 'system', content: string };
+type Step = 'url-input' | 'scraping' | 'embedding' | 'chat';
 
-const TARGET_URL = process.env.TARGET_URL || "https://github.com/microsoft/TypeScript";
-
-// Setup singletons outside component
-const geminiClient = process.env.GEMINI_API_KEY ? new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY }) : null;
-const crawler = new WebCrawler({ headless: true, maxRequestsPerCrawl: 5 });
+// ─── Singletons ────────────────────────────────────────────────────────────────
+const geminiClient = process.env.GEMINI_API_KEY
+    ? new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY }) : null;
+const crawler = new WebCrawler({ headless: true, maxRequestsPerCrawl: 10 });
 const splitter = new TextSplitter({ chunkSize: 800, chunkOverlap: 100 });
-const embedder = new GeminiEmbedder({ model: "text-embedding-004" });
+const embedder = new GeminiEmbedder({ model: 'text-embedding-004' });
 const vectorStore = new InMemoryVectorStore(embedder);
 const memoryStore = new InMemoryStore();
 const rag = createRag({
     storage: { vector: vectorStore, memory: memoryStore },
     embedder,
-    guardrails: { minRelevanceScore: 0.5, maxTokens: 3000 }
+    guardrails: { minRelevanceScore: 0.5, maxTokens: 3000 },
 });
 const geminiAdapter = new GeminiAdapter(rag);
 
+// ─── Helpers ───────────────────────────────────────────────────────────────────
+/** Parse the user's URL input — supports multiple URLs separated by spaces */
+function parseUrls(raw: string): string[] {
+    return raw.trim().split(/\s+/).filter(Boolean).map(u =>
+        u.startsWith('http') ? u : `https://${u}`
+    );
+}
+/** Shorten a URL for display — keeps host + first 40 chars of path */
+function shortUrl(url: string): string {
+    try {
+        const u = new URL(url);
+        const path = u.pathname.length > 40
+            ? u.pathname.slice(0, 38) + '…' : u.pathname;
+        return u.hostname + path;
+    } catch { return url.slice(0, 60); }
+}
+
+// ─── App ───────────────────────────────────────────────────────────────────────
 const App = () => {
-    const [step, setStep] = useState<'init' | 'scraping' | 'embedding' | 'chat'>('init');
-    const [messages, setMessages] = useState<Message[]>([
-        { role: 'system', content: `You are a helpful programming assistant summarizing a GitHub repository: ${TARGET_URL}` }
-    ]);
+    const [step, setStep] = useState<Step>('url-input');
+    const [urlInput, setUrlInput] = useState('');
+    const [loadedUrls, setLoadedUrls] = useState<string[]>([]);
+    const [docCount, setDocCount] = useState(0);
+    const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState('');
     const [isGenerating, setIsGenerating] = useState(false);
     const [currentStream, setCurrentStream] = useState('');
     const [error, setError] = useState<string | null>(null);
+    const [statusMsg, setStatusMsg] = useState('');
 
-    useEffect(() => {
+    // ── load one or more URLs into the vector store ──────────────────────────
+    const loadUrls = useCallback(async (urls: string[]) => {
+        setStep('scraping');
+        setStatusMsg(`Crawling ${urls.length} URL(s)…`);
+        const docs = await crawler.scrapeBatch(urls);
+        if (!docs.length) throw new Error('No text extracted from the provided URL(s).');
+
+        setStep('embedding');
+        setStatusMsg(`Chunking & embedding ${docs.length} page(s)…`);
+        const chunks = splitter.splitDocuments(docs);
+        const result = await rag.upsertDocuments(chunks);
+        setDocCount(n => n + result.added + result.updated);
+        setLoadedUrls(prev => [...prev, ...urls]);
+        return result;
+    }, []);
+
+    // ── URL input submitted ───────────────────────────────────────────────────
+    const handleUrlSubmit = useCallback(async (raw: string) => {
         if (!geminiClient) {
-            setError("❌ ERROR: Missing GEMINI_API_KEY in environment variables.");
+            setError('❌ Missing GEMINI_API_KEY in environment variables.');
+            return;
+        }
+        const urls = parseUrls(raw);
+        if (!urls.length) return;
+
+        try {
+            const result = await loadUrls(urls);
+            setMessages([{
+                role: 'system',
+                content: `You are a helpful assistant. The user has loaded ${result.added} document chunks from: ${urls.join(', ')}`
+            }]);
+            setStep('chat');
+        } catch (e: any) {
+            setError(`❌ ${e.message}`);
+        }
+    }, [loadUrls]);
+
+    // ── Chat submit ───────────────────────────────────────────────────────────
+    const handleChat = useCallback(async (query: string) => {
+        if (!query.trim() || isGenerating) return;
+        if (query.toLowerCase() === 'exit') process.exit(0);
+
+        // /add <url> command — load a new URL without leaving chat
+        if (query.startsWith('/add ')) {
+            const urls = parseUrls(query.slice(5));
+            if (!urls.length) return;
+            setInput('');
+            setIsGenerating(true);
+            try {
+                const result = await loadUrls(urls);
+                setMessages(prev => [...prev, {
+                    role: 'assistant',
+                    content: `✅ Loaded ${result.added} new chunks from ${urls.map(shortUrl).join(', ')}. Total: ${docCount + result.added}.`
+                }]);
+            } catch (e: any) {
+                setMessages(prev => [...prev, { role: 'assistant', content: `❌ ${e.message}` }]);
+            }
+            setStep('chat');
+            setIsGenerating(false);
             return;
         }
 
-        const initRag = async () => {
-            try {
-                setStep('scraping');
-                const docs = await crawler.scrapeBatch([TARGET_URL]);
-
-                if (docs.length === 0 || !docs[0].text) {
-                    setError("❌ Failed to extract any text from the repository.");
-                    return;
-                }
-
-                setStep('embedding');
-                await rag.addDocuments(splitter.splitDocuments(docs));
-
-                setStep('chat');
-            } catch (e: any) {
-                setError(`Initialization Failed: ${e.message}`);
-            }
-        };
-        initRag();
-    }, []);
-
-    const handleSubmit = async (query: string) => {
-        if (!query.trim() || isGenerating) return;
-        if (query.toLowerCase() === 'exit') {
-            process.exit(0);
-        }
-
-        const newMessages = [...messages, { role: 'user' as const, content: query }];
+        const newMessages: Message[] = [...messages, { role: 'user', content: query }];
         setMessages(newMessages);
         setInput('');
         setIsGenerating(true);
         setCurrentStream('');
 
         try {
-            // Get Gemini-specific payload using the GeminiAdapter
             const geminiConfig = await geminiAdapter.getCompletionConfig(
-                newMessages,
-                { memory: false }
+                newMessages as any, { memory: false }
             );
-
-            // Execute using the official Gemini SDK
             const stream = await geminiClient!.models.generateContentStream({
                 model: 'gemini-2.0-flash',
                 contents: geminiConfig.contents,
-                config: {
-                    systemInstruction: geminiConfig.systemInstruction,
-                }
+                config: { systemInstruction: geminiConfig.systemInstruction },
             });
-
-            let fullContent = '';
+            let full = '';
             for await (const chunk of stream) {
-                const text = chunk.text || "";
-                fullContent += text;
-                setCurrentStream(fullContent);
+                full += chunk.text || '';
+                setCurrentStream(full);
             }
-
-            setMessages([...newMessages, { role: 'assistant', content: fullContent }]);
+            setMessages([...newMessages, { role: 'assistant', content: full }]);
+        } catch (e: any) {
+            setError(`Error: ${e.message}`);
+        } finally {
             setIsGenerating(false);
             setCurrentStream('');
-        } catch (err: any) {
-            setError(`Error generating response: ${err.message}`);
-            setIsGenerating(false);
         }
-    };
+    }, [messages, isGenerating, docCount, loadUrls]);
 
-    if (error) {
-        return <Text color="red">{error}</Text>;
-    }
+    // ── Error state ───────────────────────────────────────────────────────────
+    if (error) return (
+        <Box flexDirection="column" padding={1}>
+            <Text color="red">{error}</Text>
+        </Box>
+    );
 
-    if (step === 'init' || step === 'scraping') {
-        return (
+    // ── URL input screen ──────────────────────────────────────────────────────
+    if (step === 'url-input') return (
+        <Box flexDirection="column" gap={1} paddingY={1}>
+            <Box flexDirection="column" borderStyle="round" borderColor="cyan" paddingX={2} paddingY={1}>
+                <Text color="cyan" bold>🔮 RagNexus — Gemini</Text>
+                <Text color="gray">Paste one or more URLs separated by spaces, then press Enter.</Text>
+                <Text color="gray" dimColor>Supports: GitHub, docs, blog posts, any public page</Text>
+            </Box>
+            <Box marginTop={1}>
+                <Text color="blueBright" bold>URL(s)› </Text>
+                <TextInput
+                    value={urlInput}
+                    onChange={setUrlInput}
+                    onSubmit={handleUrlSubmit}
+                    placeholder="https://github.com/owner/repo  https://another-url.com"
+                />
+            </Box>
+        </Box>
+    );
+
+    // ── Scraping / embedding ──────────────────────────────────────────────────
+    if (step === 'scraping' || step === 'embedding') return (
+        <Box flexDirection="column" gap={1} paddingY={1}>
             <Box>
                 <Text color="cyan"><Spinner type="dots" /></Text>
-                <Text color="blueBright"> Crawling repository: {TARGET_URL} (This may take 10-15s)...</Text>
+                <Text color="cyanBright">  {statusMsg}</Text>
             </Box>
-        );
-    }
+            {loadedUrls.map(u => (
+                <Text key={u} color="gray" dimColor>  ✓ {shortUrl(u)}</Text>
+            ))}
+        </Box>
+    );
 
-    if (step === 'embedding') {
-        return (
-            <Box>
-                <Text color="magenta"><Spinner type="dots" /></Text>
-                <Text color="magentaBright"> Creating Gemini embeddings...</Text>
-            </Box>
-        );
-    }
-
+    // ── Chat screen ───────────────────────────────────────────────────────────
     return (
         <Box flexDirection="column" gap={1} paddingY={1}>
-            <Box flexDirection="column" borderStyle="round" borderColor="cyan" paddingX={2}>
-                <Text color="cyan" bold>RagNexus Terminal (Google Gemini)</Text>
-                <Text color="gray">Repository: {TARGET_URL}</Text>
+            {/* Header */}
+            <Box flexDirection="column" borderStyle="round" borderColor="cyan" paddingX={2} paddingY={0}>
+                <Box gap={2}>
+                    <Text color="cyan" bold>🔮 RagNexus — Gemini</Text>
+                    <Text color="gray">{docCount} chunks</Text>
+                    <Text color="gray">·</Text>
+                    <Text color="gray">{loadedUrls.length} source(s)</Text>
+                </Box>
+                {loadedUrls.map(u => (
+                    <Text key={u} color="gray" dimColor>  {shortUrl(u)}</Text>
+                ))}
             </Box>
 
+            {/* Hint */}
+            <Text color="gray" dimColor>  Tip: type <Text color="cyan">/add &lt;url&gt;</Text> to load more sources · <Text color="cyan">exit</Text> to quit</Text>
+
+            {/* Message history */}
             <Box flexDirection="column" marginTop={1}>
                 {messages.filter(m => m.role !== 'system').map((m, i) => (
                     <Box key={i} flexDirection="column" marginBottom={1}>
                         <Text color={m.role === 'user' ? 'blueBright' : 'greenBright'} bold>
-                            {m.role === 'user' ? 'You' : 'Gemini'}:
+                            {m.role === 'user' ? 'You' : 'Gemini'}
                         </Text>
                         <Text>{m.content}</Text>
                     </Box>
                 ))}
             </Box>
 
+            {/* Streaming response */}
             {isGenerating && (
                 <Box flexDirection="column" marginBottom={1}>
-                    <Text color="greenBright" bold>Gemini:</Text>
-                    {currentStream.length > 0 ? (
+                    <Text color="greenBright" bold>Gemini</Text>
+                    {currentStream ? (
                         <Text>{currentStream}</Text>
                     ) : (
-                        <Box>
+                        <Box gap={1}>
                             <Text color="yellow"><Spinner type="dots" /></Text>
-                            <Text color="gray"> Thinking...</Text>
+                            <Text color="gray">Thinking…</Text>
                         </Box>
                     )}
                 </Box>
             )}
 
+            {/* Input */}
             {!isGenerating && (
-                <Box marginTop={1}>
-                    <Text color="blueBright" bold>You: </Text>
+                <Box marginTop={1} gap={1}>
+                    <Text color="blueBright" bold>You›</Text>
                     <TextInput
                         value={input}
                         onChange={setInput}
-                        onSubmit={handleSubmit}
-                        placeholder="Ask a question about the repo... (type 'exit' to quit)"
+                        onSubmit={handleChat}
+                        placeholder="Ask anything… or /add <url>"
                     />
                 </Box>
             )}
