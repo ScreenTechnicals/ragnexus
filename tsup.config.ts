@@ -7,4 +7,9 @@ export default defineConfig({
     splitting: false,
     sourcemap: true,
     clean: true,
+    external: [
+        "@crawlee/playwright",
+        "playwright",
+        "@qdrant/js-client-rest"
+    ]
 });

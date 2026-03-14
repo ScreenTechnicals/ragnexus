@@ -46,6 +46,7 @@
   "devDependencies": {
     "@crawlee/playwright": "^3.16.0",
     "@qdrant/js-client-rest": "^1.17.0",
+    "@types/marked-terminal": "^6.1.1",
     "@types/node": "^25.5.0",
     "@types/react": "^19.2.14",
     "playwright": "^1.58.2",
@@ -63,6 +64,8 @@
     "ink": "^6.8.0",
     "ink-spinner": "^5.0.0",
     "ink-text-input": "^6.0.0",
+    "marked": "^15.0.12",
+    "marked-terminal": "^7.3.0",
     "openai": "^6.27.0",
     "react": "^19.2.4"
   }

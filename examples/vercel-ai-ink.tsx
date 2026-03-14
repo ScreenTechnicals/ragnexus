@@ -3,7 +3,10 @@ import { streamText } from 'ai';
 import 'dotenv/config';
 import { Box, render, Text } from 'ink';
 import Spinner from 'ink-spinner';
+import { marked } from 'marked';
+// @ts-ignore
 import TextInput from 'ink-text-input';
+import TerminalRenderer from 'marked-terminal';
 import { useCallback, useState } from 'react';
 import {
     createRag,
@@ -14,6 +17,8 @@ import {
     VercelAIAdapter,
     WebCrawler
 } from "../src";
+
+marked.setOptions({ renderer: new TerminalRenderer() as any });
 
 type Message = { role: 'user' | 'assistant' | 'system', content: string };
 type Step = 'url-input' | 'scraping' | 'embedding' | 'chat';
@@ -167,7 +172,7 @@ const App = () => {
                         <Text color={m.role === 'user' ? 'blueBright' : 'yellowBright'} bold>
                             {m.role === 'user' ? 'You' : 'AI SDK'}
                         </Text>
-                        <Text>{m.content}</Text>
+                        {m.role === 'assistant' ? <Text>{marked.parse(m.content) as string}</Text> : <Text>{m.content}</Text>}
                     </Box>
                 ))}
             </Box>
@@ -175,7 +180,7 @@ const App = () => {
             {isGenerating && (
                 <Box flexDirection="column" marginBottom={1}>
                     <Text color="yellowBright" bold>AI SDK</Text>
-                    {currentStream ? <Text>{currentStream}</Text> : (
+                    {currentStream ? <Text>{marked.parse(currentStream) as string}</Text> : (
                         <Box gap={1}><Text color="yellow"><Spinner type="dots" /></Text><Text color="gray">Thinking…</Text></Box>
                     )}
                 </Box>
