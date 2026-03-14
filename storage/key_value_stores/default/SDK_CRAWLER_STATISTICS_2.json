@@ -1,0 +1,52 @@
+{
+  "requestsFinished": 0,
+  "requestsFailed": 1,
+  "requestsRetries": 1,
+  "requestsFailedPerMinute": 20,
+  "requestsFinishedPerMinute": 0,
+  "requestMinDurationMillis": null,
+  "requestMaxDurationMillis": 0,
+  "requestTotalFailedDurationMillis": 534,
+  "requestTotalFinishedDurationMillis": 0,
+  "crawlerStartedAt": "2026-03-14T16:29:15.532Z",
+  "crawlerFinishedAt": "2026-03-14T16:29:18.340Z",
+  "statsPersistedAt": "2026-03-14T16:29:18.340Z",
+  "crawlerRuntimeMillis": 2968,
+  "crawlerLastStartTimestamp": 1773505755372,
+  "requestRetryHistogram": [
+    null,
+    null,
+    null,
+    1
+  ],
+  "statsId": 2,
+  "requestAvgFailedDurationMillis": 534,
+  "requestAvgFinishedDurationMillis": null,
+  "requestTotalDurationMillis": 534,
+  "requestsTotal": 1,
+  "requestsWithStatusCode": {
+    "429": 4
+  },
+  "errors": {
+    "/Users/chinmayasa/developments/my-rag-engine/node_modules/@crawlee/src/internals/basic-crawler.ts:1377:19": {
+      "missing error code": {
+        "Error": {
+          "Request blocked - received 429 status code.": {
+            "count": 1
+          }
+        }
+      }
+    }
+  },
+  "retryErrors": {
+    "/Users/chinmayasa/developments/my-rag-engine/node_modules/@crawlee/src/internals/basic-crawler.ts:1377:19": {
+      "missing error code": {
+        "Error": {
+          "Request blocked - received 429 status code.": {
+            "count": 3
+          }
+        }
+      }
+    }
+  }
+}
