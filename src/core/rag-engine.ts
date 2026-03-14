@@ -58,7 +58,7 @@ export class RAGEngine {
      * Format matches Vercel AI SDK `{ role, content }[]`.
      */
     public async buildContext(options: RAGQueryOptions): Promise<RAGMessage[]> {
-        const { messages, userId, memory = true, systemPrompt, topK } = options;
+        const { messages, userId, memory = true, systemPrompt, topK, searchMode, alpha } = options;
 
         let retrievedDocs: RAGDocument[] = [];
         let memoryFacts: any[] = [];
@@ -74,7 +74,7 @@ export class RAGEngine {
 
         // Retrieve documents
         if (this.retriever && query) {
-            retrievedDocs = await this.retriever.retrieve(query, { topK });
+            retrievedDocs = await this.retriever.retrieve(query, { topK, searchMode, alpha });
         }
 
         // Fire observability hook if configured

@@ -8,11 +8,12 @@ export class InMemoryVectorStore implements VectorStore {
     private docIndex: Map<string, number> = new Map();
     private embedder: Embedder;
 
-    // BM25 state — rebuilt lazily on first hybrid/keyword search
-    private bm25Index: BM25Index | null = null;
+    // Incremental BM25 state
+    private bm25: IncrementalBM25;
 
     constructor(embedder: Embedder) {
         this.embedder = embedder;
+        this.bm25 = new IncrementalBM25();
     }
 
     // ─── Private helpers ─────────────────────────────────────────────────────
@@ -25,13 +26,18 @@ export class InMemoryVectorStore implements VectorStore {
     private removeById(id: string): void {
         const idx = this.docIndex.get(id);
         if (idx === undefined) return;
+        const removed = this.docs[idx];
+
+        // Swap-remove: move last element into the gap
         const last = this.docs[this.docs.length - 1];
         this.docs[idx] = last;
         this.docIndex.set(last.id, idx);
         this.docs.pop();
         this.docIndex.delete(id);
         this.documentVectors.delete(id);
-        this.bm25Index = null; // invalidate BM25 index
+
+        // Incrementally remove from BM25
+        this.bm25.removeDoc(removed);
     }
 
     private stamp(doc: RAGDocument): RAGDocument {
@@ -51,49 +57,9 @@ export class InMemoryVectorStore implements VectorStore {
 
     /**
      * BM25 scoring for a single query against a single doc.
-     * Uses pre-built IDF map from the BM25Index.
      */
-    private bm25Score(query: string, doc: RAGDocument, index: BM25Index): number {
-        const k1 = 1.5, b = 0.75;
-        const queryTerms = tokenize(query);
-        const docTerms = tokenize(doc.text);
-        const docLen = docTerms.length;
-
-        const tf = new Map<string, number>();
-        for (const t of docTerms) tf.set(t, (tf.get(t) ?? 0) + 1);
-
-        let score = 0;
-        for (const term of new Set(queryTerms)) {
-            const idf = index.idf.get(term) ?? 0;
-            const freq = tf.get(term) ?? 0;
-            const norm = freq * (k1 + 1) / (freq + k1 * (1 - b + b * (docLen / index.avgDocLen)));
-            score += idf * norm;
-        }
-        return score;
-    }
-
-    private buildBM25Index(): BM25Index {
-        if (this.bm25Index) return this.bm25Index;
-
-        const N = this.docs.length;
-        if (N === 0) return { idf: new Map(), avgDocLen: 0 };
-
-        const df = new Map<string, number>();
-        let totalLen = 0;
-
-        for (const doc of this.docs) {
-            const terms = new Set(tokenize(doc.text));
-            totalLen += tokenize(doc.text).length;
-            for (const t of terms) df.set(t, (df.get(t) ?? 0) + 1);
-        }
-
-        const idf = new Map<string, number>();
-        for (const [term, freq] of df) {
-            idf.set(term, Math.log((N - freq + 0.5) / (freq + 0.5) + 1));
-        }
-
-        this.bm25Index = { idf, avgDocLen: totalLen / N };
-        return this.bm25Index;
+    private bm25Score(query: string, doc: RAGDocument): number {
+        return this.bm25.score(query, doc.text);
     }
 
     // ─── VectorStore interface ────────────────────────────────────────────────
@@ -109,8 +75,8 @@ export class InMemoryVectorStore implements VectorStore {
             this.docIndex.set(stamped[i].id, this.docs.length);
             this.docs.push(stamped[i]);
             this.documentVectors.set(stamped[i].id, vectors[i]);
+            this.bm25.addDoc(stamped[i]);
         }
-        this.bm25Index = null; // invalidate BM25 index
     }
 
     public async upsert(docs: RAGDocument[]): Promise<UpsertResult> {
@@ -144,6 +110,7 @@ export class InMemoryVectorStore implements VectorStore {
                 this.docIndex.set(stamped[i].id, this.docs.length);
                 this.docs.push(stamped[i]);
                 this.documentVectors.set(stamped[i].id, vectors[i]);
+                this.bm25.addDoc(stamped[i]);
             }
             result.updated = toUpdate.length;
         }
@@ -155,11 +122,11 @@ export class InMemoryVectorStore implements VectorStore {
                 this.docIndex.set(stamped[i].id, this.docs.length);
                 this.docs.push(stamped[i]);
                 this.documentVectors.set(stamped[i].id, vectors[i]);
+                this.bm25.addDoc(stamped[i]);
             }
             result.added = toAdd.length;
         }
 
-        this.bm25Index = null; // invalidate BM25 index after any modification
         return result;
     }
 
@@ -173,13 +140,10 @@ export class InMemoryVectorStore implements VectorStore {
      * - **'keyword'**: BM25 keyword scoring — no embedding needed
      * - **'hybrid'**: weighted sum of normalised BM25 + cosine scores
      *
-     * @param query   The query vector (semantic) or query string (keyword/hybrid).
-     *                For keyword/hybrid, pass the raw query string cast to any —
-     *                or use `searchByText()` for a cleaner API.
+     * @param vector  The query vector (semantic/hybrid) or ignored (keyword).
      * @param topK    Number of results to return. Default: 5.
      * @param mode    Search mode. Default: 'semantic'.
-     * @param alpha   Blend weight for hybrid: 0 = pure keyword, 1 = pure semantic.
-     *                Default: 0.5.
+     * @param alpha   Blend weight for hybrid: 0 = pure keyword, 1 = pure semantic. Default: 0.5.
      */
     public async search(
         vector: number[],
@@ -202,20 +166,17 @@ export class InMemoryVectorStore implements VectorStore {
             });
 
         } else if (mode === 'keyword') {
-            // vector[] is actually unused; caller should pass queryText via searchByText
             const queryText = (vector as any as string);
-            const idx = this.buildBM25Index();
             scored = activeDocs.map(doc => ({
                 ...doc,
-                score: this.bm25Score(queryText, doc, idx),
+                score: this.bm25Score(queryText, doc),
             }));
 
         } else {
             // Hybrid: normalise both score distributions then blend
             const queryText = (vector as any as string);
-            const idx = this.buildBM25Index();
 
-            const bm25Scores = activeDocs.map(doc => this.bm25Score(queryText, doc, idx));
+            const bm25Scores = activeDocs.map(doc => this.bm25Score(queryText, doc));
             const cosScores = activeDocs.map(doc => {
                 const docVec = this.documentVectors.get(doc.id);
                 return docVec ? this.cosineSimilarity(vector, docVec) : 0;
@@ -266,8 +227,7 @@ export class InMemoryVectorStore implements VectorStore {
         );
         if (!activeDocs.length) return [];
 
-        const idx = this.buildBM25Index();
-        const bm25Scores = activeDocs.map(doc => this.bm25Score(query, doc, idx));
+        const bm25Scores = activeDocs.map(doc => this.bm25Score(query, doc));
         const cosScores = activeDocs.map(doc => {
             const docVec = this.documentVectors.get(doc.id);
             return docVec ? this.cosineSimilarity(vector, docVec) : 0;
@@ -286,12 +246,113 @@ export class InMemoryVectorStore implements VectorStore {
     }
 }
 
-// ─── BM25 helpers ─────────────────────────────────────────────────────────────
+// ─── Incremental BM25 ────────────────────────────────────────────────────────
 
-interface BM25Index {
-    idf: Map<string, number>;
-    avgDocLen: number;
+/**
+ * Maintains BM25 statistics incrementally as documents are added/removed,
+ * avoiding full index rebuilds on every mutation.
+ *
+ * Tracks: document count (N), document frequency (df), total token length,
+ * and per-document token lengths for IDF recalculation.
+ */
+class IncrementalBM25 {
+    /** Number of documents in the index. */
+    private N = 0;
+    /** Document frequency: term → number of docs containing the term. */
+    private df = new Map<string, number>();
+    /** Sum of all document token lengths (for avgDocLen). */
+    private totalDocLen = 0;
+    /** Per-document token length, keyed by doc id. */
+    private docLengths = new Map<string, number>();
+    /** Per-document unique term sets, keyed by doc id (for removal). */
+    private docTermSets = new Map<string, Set<string>>();
+
+    // Cached IDF values — invalidated on df changes
+    private idfCache = new Map<string, number>();
+    private idfDirty = true;
+
+    get avgDocLen(): number {
+        return this.N === 0 ? 0 : this.totalDocLen / this.N;
+    }
+
+    addDoc(doc: RAGDocument): void {
+        const terms = tokenize(doc.text);
+        const uniqueTerms = new Set(terms);
+
+        this.N++;
+        this.totalDocLen += terms.length;
+        this.docLengths.set(doc.id, terms.length);
+        this.docTermSets.set(doc.id, uniqueTerms);
+
+        for (const term of uniqueTerms) {
+            this.df.set(term, (this.df.get(term) ?? 0) + 1);
+        }
+        this.idfDirty = true;
+    }
+
+    removeDoc(doc: RAGDocument): void {
+        const uniqueTerms = this.docTermSets.get(doc.id);
+        if (!uniqueTerms) return;
+
+        const docLen = this.docLengths.get(doc.id) ?? 0;
+
+        this.N--;
+        this.totalDocLen -= docLen;
+        this.docLengths.delete(doc.id);
+        this.docTermSets.delete(doc.id);
+
+        for (const term of uniqueTerms) {
+            const count = (this.df.get(term) ?? 1) - 1;
+            if (count <= 0) {
+                this.df.delete(term);
+            } else {
+                this.df.set(term, count);
+            }
+        }
+        this.idfDirty = true;
+    }
+
+    /**
+     * Score a query against a document using BM25.
+     * IDF values are lazily recomputed only when the index has been mutated.
+     */
+    score(query: string, docText: string): number {
+        if (this.N === 0) return 0;
+
+        if (this.idfDirty) {
+            this.rebuildIdf();
+        }
+
+        const k1 = 1.5, b = 0.75;
+        const avgDl = this.avgDocLen;
+        const queryTerms = tokenize(query);
+        const docTerms = tokenize(docText);
+        const docLen = docTerms.length;
+
+        const tf = new Map<string, number>();
+        for (const t of docTerms) tf.set(t, (tf.get(t) ?? 0) + 1);
+
+        let total = 0;
+        for (const term of new Set(queryTerms)) {
+            const idf = this.idfCache.get(term) ?? 0;
+            const freq = tf.get(term) ?? 0;
+            const norm = freq * (k1 + 1) / (freq + k1 * (1 - b + b * (docLen / avgDl)));
+            total += idf * norm;
+        }
+        return total;
+    }
+
+    /** Rebuild IDF cache from current df/N. Only runs when dirty. */
+    private rebuildIdf(): void {
+        this.idfCache.clear();
+        for (const [term, freq] of this.df) {
+            this.idfCache.set(term, Math.log((this.N - freq + 0.5) / (freq + 0.5) + 1));
+        }
+        this.idfDirty = false;
+    }
 }
+
+// ─── BM25 helpers ─────────────────────────────────────────────────────────────
 
 /** Simple tokenizer: lowercase, split on non-alphanumeric, filter stopwords. */
 function tokenize(text: string): string[] {

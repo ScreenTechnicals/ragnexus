@@ -1,8 +1,10 @@
 import { Guardrails } from "../core/guardrails";
-import { Embedder, RAGDocument, Reranker, VectorStore } from "../types";
+import { Embedder, RAGDocument, Reranker, SearchMode, VectorStore } from "../types";
 
 export interface RetrieverOptions {
     topK?: number;
+    searchMode?: SearchMode;
+    alpha?: number;
 }
 
 export class Retriever {
@@ -25,20 +27,29 @@ export class Retriever {
 
     /**
      * Full retrieval pipeline:
-     * 1. Embed query
-     * 2. Vector / hybrid search
+     * 1. Embed query (skipped for pure keyword mode)
+     * 2. Vector / keyword / hybrid search
      * 3. Cross-encoder rerank (if configured)
      * 4. Guardrails (relevance filter, density rejection, instruction strip)
      */
     public async retrieve(query: string, options?: RetrieverOptions): Promise<RAGDocument[]> {
         const topK = options?.topK ?? 5;
+        const searchMode = options?.searchMode ?? 'semantic';
+        const alpha = options?.alpha ?? 0.5;
 
-        // 1. Embed
-        const queryVector = await this.embedder.embed(query);
-
-        // 2. Search — fetch more candidates when a reranker will trim the list
+        // Fetch more candidates when a reranker will trim the list
         const fetchK = this.reranker ? Math.max(topK * 3, 20) : topK;
-        const rawResults = await this.vectorStore.search(queryVector, fetchK);
+
+        let rawResults: RAGDocument[];
+
+        if (searchMode !== 'semantic' && this.vectorStore.searchByText) {
+            // Use text-based search for keyword/hybrid modes
+            rawResults = await this.vectorStore.searchByText(query, fetchK, searchMode, alpha);
+        } else {
+            // Default semantic search: embed query then search by vector
+            const queryVector = await this.embedder.embed(query);
+            rawResults = await this.vectorStore.search(queryVector, fetchK);
+        }
 
         // 3. Rerank (cross-encoder) then trim to topK
         const rankedResults = this.reranker

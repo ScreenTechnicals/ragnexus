@@ -1,4 +1,5 @@
 import { RAGDocument } from "../types";
+import { sha256 } from "../utils/hash";
 
 export interface FirecrawlOptions {
     apiKey?: string;
@@ -44,7 +45,7 @@ export class Firecrawler {
         }
 
         return {
-            id: `fc-${crypto.randomUUID()}`,
+            id: sha256(url),
             text: markdown,
             source: url,
             metadata: metadata || {}

@@ -50,6 +50,8 @@ export interface RAGQueryOptions {
     memory?: boolean;     // Enable memory extraction/injection
     topK?: number;        // Max documents to retrieve (default: 5)
     systemPrompt?: string;
+    searchMode?: SearchMode;  // Search mode: 'semantic' | 'keyword' | 'hybrid' (default: 'semantic')
+    alpha?: number;           // Hybrid blend weight: 0 = pure keyword, 1 = pure semantic (default: 0.5)
 }
 
 // Storage Interfaces
@@ -58,6 +60,8 @@ export interface VectorStore {
     upsert(docs: RAGDocument[]): Promise<UpsertResult>;
     delete(ids: string[]): Promise<void>;
     search(vector: number[], topK?: number): Promise<RAGDocument[]>;
+    /** Optional text-based search for keyword/hybrid modes. */
+    searchByText?(query: string, topK?: number, mode?: SearchMode, alpha?: number): Promise<RAGDocument[]>;
 }
 
 export interface MemoryStore {
