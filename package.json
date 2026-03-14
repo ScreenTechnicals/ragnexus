@@ -1,6 +1,6 @@
 {
   "name": "ragnexus",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A deterministically safe RAG + Memory SDK built to run anywhere.",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
