@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import CodeBlock from "./CodeBlock";
 
 function Home() {
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   return (
     <div className="Home">
       <div className="bg-blur"></div>
@@ -19,7 +21,38 @@ function Home() {
           <Link to="/" className="logo" style={{ textDecoration: "none" }}>
             RagNexus
           </Link>
-          <nav>
+
+          <button
+            className="mobile-nav-toggle"
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            aria-label="Toggle Navigation Menu"
+          >
+            <svg
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              {isMobileMenuOpen ? (
+                <>
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </>
+              ) : (
+                <>
+                  <circle cx="12" cy="12" r="1"></circle>
+                  <circle cx="12" cy="5" r="1"></circle>
+                  <circle cx="12" cy="19" r="1"></circle>
+                </>
+              )}
+            </svg>
+          </button>
+
+          <nav className={isMobileMenuOpen ? "nav-open" : ""}>
             <a href="#features">Features</a>
             <Link to="/docs">Docs</Link>
             <a

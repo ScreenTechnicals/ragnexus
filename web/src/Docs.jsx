@@ -825,12 +825,16 @@ const NAV = [
 
 function Docs() {
   const [activeTab, setActiveTab] = useState("getting-started");
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const currentDoc = DOCS_CONTENT[activeTab] || DOCS_CONTENT["getting-started"];
 
   const NavItem = ({ id, label }) => (
     <button
       onClick={() => {
         setActiveTab(id);
+        setIsSidebarOpen(false);
+        setIsMobileMenuOpen(false);
         window.scrollTo(0, 0);
       }}
       className={`docs-nav-link ${activeTab === id ? "active" : ""}`}
@@ -851,10 +855,63 @@ function Docs() {
             width: "100%",
           }}
         >
-          <Link to="/" className="logo" style={{ textDecoration: "none" }}>
-            RagNexus
-          </Link>
-          <nav>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <button
+              className="docs-sidebar-toggle"
+              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+              aria-label="Toggle Documentation Sidebar"
+            >
+              <svg
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <line x1="3" y1="12" x2="21" y2="12"></line>
+                <line x1="3" y1="6" x2="21" y2="6"></line>
+                <line x1="3" y1="18" x2="21" y2="18"></line>
+              </svg>
+            </button>
+            <Link to="/" className="logo" style={{ textDecoration: "none" }}>
+              RagNexus
+            </Link>
+          </div>
+
+          <button
+            className="mobile-nav-toggle"
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            aria-label="Toggle Navigation Menu"
+          >
+            <svg
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              {isMobileMenuOpen ? (
+                <>
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </>
+              ) : (
+                <>
+                  <circle cx="12" cy="12" r="1"></circle>
+                  <circle cx="12" cy="5" r="1"></circle>
+                  <circle cx="12" cy="19" r="1"></circle>
+                </>
+              )}
+            </svg>
+          </button>
+
+          <nav className={isMobileMenuOpen ? "nav-open" : ""}>
             <Link to="/">Home</Link>
             <Link to="/docs" className="active">
               Docs
@@ -873,7 +930,7 @@ function Docs() {
       </header>
 
       <div className="docs-layout">
-        <aside className="docs-sidebar">
+        <aside className={`docs-sidebar ${isSidebarOpen ? "open" : ""}`}>
           {NAV.map(({ group, items }) => (
             <div key={group} className="docs-nav-group">
               <h4 className="docs-nav-title">{group}</h4>
