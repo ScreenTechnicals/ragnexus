@@ -215,7 +215,7 @@ Loaded ${upsertResult.added} initial chunks from: ${urls.join(', ')}`
                         for (const tc of delta.tool_calls) {
                             if (tc.index !== undefined) {
                                 if (!toolCalls[tc.index]) {
-                                    toolCalls[tc.index] = { id: tc.id || '', function: { name: '', arguments: '' } };
+                                    toolCalls[tc.index] = { id: tc.id || '', type: 'function', function: { name: '', arguments: '' } };
                                 }
                                 if (tc.id) toolCalls[tc.index].id = tc.id;
                                 if (tc.function?.name) toolCalls[tc.index].function.name += tc.function.name;

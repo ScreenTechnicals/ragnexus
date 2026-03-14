@@ -1,37 +1,29 @@
 {
   "requestsFinished": 1,
   "requestsFailed": 0,
-  "requestsRetries": 1,
+  "requestsRetries": 0,
   "requestsFailedPerMinute": 0,
-  "requestsFinishedPerMinute": 10,
-  "requestMinDurationMillis": 6045,
-  "requestMaxDurationMillis": 6045,
+  "requestsFinishedPerMinute": 15,
+  "requestMinDurationMillis": 3877,
+  "requestMaxDurationMillis": 3877,
   "requestTotalFailedDurationMillis": 0,
-  "requestTotalFinishedDurationMillis": 6045,
-  "crawlerStartedAt": "2026-03-14T09:47:51.677Z",
-  "crawlerFinishedAt": "2026-03-14T09:47:57.852Z",
-  "statsPersistedAt": "2026-03-14T09:47:57.852Z",
-  "crawlerRuntimeMillis": 6304,
-  "crawlerLastStartTimestamp": 1773481671548,
-  "requestRetryHistogram": [null, 1],
+  "requestTotalFinishedDurationMillis": 3877,
+  "crawlerStartedAt": "2026-03-14T15:58:27.106Z",
+  "crawlerFinishedAt": "2026-03-14T15:58:31.069Z",
+  "statsPersistedAt": "2026-03-14T15:58:31.069Z",
+  "crawlerRuntimeMillis": 4033,
+  "crawlerLastStartTimestamp": 1773503907036,
+  "requestRetryHistogram": [
+    1
+  ],
   "statsId": 0,
   "requestAvgFailedDurationMillis": null,
-  "requestAvgFinishedDurationMillis": 6045,
-  "requestTotalDurationMillis": 6045,
+  "requestAvgFinishedDurationMillis": 3877,
+  "requestTotalDurationMillis": 3877,
   "requestsTotal": 1,
   "requestsWithStatusCode": {
     "200": 1
   },
   "errors": {},
-  "retryErrors": {
-    "/Users/chsa/Desktop/developments/ragnexus/src/crawlers/crawlee.ts:45:28": {
-      "missing error code": {
-        "TimeoutError": {
-          "page.waitForLoadState: Timeout 30000ms exceeded.": {
-            "count": 1
-          }
-        }
-      }
-    }
-  }
+  "retryErrors": {}
 }
