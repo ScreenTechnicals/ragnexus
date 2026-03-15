@@ -1,7 +1,11 @@
 import { PlaywrightCrawler } from "@crawlee/playwright";
+import { chromium } from "playwright-extra";
+import stealth from "puppeteer-extra-plugin-stealth";
 import { CrawlError } from "../errors";
 import { RAGDocument } from "../types";
 import { sha256 } from "../utils/hash";
+
+chromium.use(stealth());
 
 export interface CrawleeOptions {
     maxRequestsPerCrawl?: number;
@@ -61,6 +65,9 @@ export class WebCrawler {
         const crawler = new PlaywrightCrawler({
             maxRequestsPerCrawl: this.options.maxRequestsPerCrawl,
             headless: this.options.headless,
+            launchContext: {
+                launcher: chromium,
+            },
             requestHandler: async ({ page, request, response }) => {
                 await page.waitForLoadState('networkidle');
 
@@ -147,6 +154,9 @@ export class WebCrawler {
         const crawler = new PlaywrightCrawler({
             maxRequestsPerCrawl: this.options.maxRequestsPerCrawl,
             headless: this.options.headless,
+            launchContext: {
+                launcher: chromium,
+            },
             requestHandler: async ({ page, request, response, enqueueLinks }) => {
                 await page.waitForLoadState('networkidle');
 
