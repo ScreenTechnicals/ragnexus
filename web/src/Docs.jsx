@@ -331,6 +331,113 @@ rag.on("guardrail:reject", (doc, reason) => console.warn(doc.id, reason));`}
     ),
   },
 
+  "data-ingestion": {
+    title: "Data Ingestion",
+    content: (
+      <>
+        <p>
+          RagNexus is <strong>source-agnostic</strong>. It doesn't care where
+          your text comes from — the built-in web crawler is just one option.
+          All you need is an object with <code>id</code> and{" "}
+          <code>text</code>.
+        </p>
+
+        <h2>The RAGDocument Interface</h2>
+        <CodeBlock
+          code={`interface RAGDocument {
+  id: string;         // Unique identifier (required)
+  text: string;       // The actual content (required)
+  metadata?: object;  // Any extra data you want to attach
+  source?: string;    // URL or origin — used for citation in responses
+}`}
+          language="typescript"
+        />
+
+        <h2>From Local Files</h2>
+        <CodeBlock
+          code={`import fs from "fs";
+
+await rag.addDocuments([
+  { id: "readme", text: fs.readFileSync("README.md", "utf-8"), source: "README.md" },
+  { id: "config", text: fs.readFileSync("config.json", "utf-8"), source: "config.json" },
+]);`}
+          language="typescript"
+        />
+
+        <h2>From a Database</h2>
+        <CodeBlock
+          code={`const articles = await db.query("SELECT id, title, body FROM articles");
+
+await rag.addDocuments(
+  articles.map(row => ({
+    id: String(row.id),
+    text: row.body,
+    metadata: { title: row.title },
+  }))
+);`}
+          language="typescript"
+        />
+
+        <h2>From an API</h2>
+        <CodeBlock
+          code={`const res = await fetch("https://api.example.com/docs");
+const pages = await res.json();
+
+await rag.addDocuments(
+  pages.map(page => ({
+    id: page.slug,
+    text: page.content,
+    source: page.url,
+    metadata: { author: page.author, updatedAt: page.updated_at },
+  }))
+);`}
+          language="typescript"
+        />
+
+        <h2>From Raw Strings</h2>
+        <CodeBlock
+          code={`// Hardcoded knowledge, FAQ entries, etc.
+await rag.addDocuments([
+  { id: "faq-1", text: "RagNexus supports OpenAI, Anthropic, Gemini, Genkit, and Vercel AI SDK." },
+  { id: "faq-2", text: "You can use any embedding model — OpenAI, Cohere, Gemini, or local Ollama." },
+]);`}
+          language="typescript"
+        />
+
+        <h2>From the Built-in Web Crawler</h2>
+        <CodeBlock
+          code={`import { WebCrawler, TextSplitter } from "ragnexus";
+
+const crawler = new WebCrawler({ headless: true });
+const splitter = new TextSplitter({ chunkSize: 800 });
+
+const docs = await crawler.scrapeBatch(["https://example.com"]);
+const chunks = splitter.splitDocuments(docs);
+await rag.upsertDocuments(chunks);`}
+          language="typescript"
+        />
+
+        <div className="callout">
+          <div className="callout-title">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="16" x2="12" y2="12"></line>
+              <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+            Tip
+          </div>
+          <p>
+            For large documents (web pages, long articles), always use{" "}
+            <code>TextSplitter</code> before ingestion. Most embedding models
+            have a token limit, and chunking improves retrieval precision.
+            For short entries (FAQ items, config values), you can add them
+            directly without splitting.
+          </p>
+        </div>
+      </>
+    ),
+  },
+
   "text-splitting": {
     title: "Text Splitting",
     content: (
@@ -996,6 +1103,7 @@ const NAV = [
   {
     group: "Features",
     items: [
+      { id: "data-ingestion", label: "Data Ingestion" },
       { id: "text-splitting", label: "Text Splitting" },
       { id: "upsert-change-detection", label: "Upsert & Change Detection" },
       { id: "hybrid-search", label: "Hybrid Search" },
