@@ -71,7 +71,7 @@ function Home() {
 
       <section className="hero">
         <div className="container">
-          <div className="hero-tag">Now in v1.0.1 — Pure TypeScript</div>
+          <div className="hero-tag">Now in v1.1.0 — Pure TypeScript</div>
           <h1>
             <span className="gradient-text">Accurate RAG + Memory</span>
             <br />
