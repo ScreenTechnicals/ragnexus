@@ -55,6 +55,7 @@ function Home() {
           <nav className={isMobileMenuOpen ? "nav-open" : ""}>
             <a href="#features">Features</a>
             <Link to="/docs">Docs</Link>
+            <Link to="/examples">Examples</Link>
             <a
               href="https://github.com/ScreenTechnicals/ragnexus"
               className="github-btn"

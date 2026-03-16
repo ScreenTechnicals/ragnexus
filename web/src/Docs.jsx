@@ -1569,6 +1569,7 @@ function Docs() {
             <Link to="/docs" className="active">
               Docs
             </Link>
+            <Link to="/examples">Examples</Link>
             <a
               href="https://github.com/ScreenTechnicals/ragnexus"
               className="github-btn"
