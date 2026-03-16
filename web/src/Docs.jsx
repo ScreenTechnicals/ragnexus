@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useLocation } from "react-router-dom";
 import CodeBlock from "./CodeBlock";
 
 const DOCS_CONTENT = {
@@ -1458,20 +1458,38 @@ const NAV = [
   },
 ];
 
+function getInitialTab() {
+  const hash = window.location.hash.slice(1);
+  return hash && DOCS_CONTENT[hash] ? hash : "getting-started";
+}
+
 function Docs() {
-  const [activeTab, setActiveTab] = useState("getting-started");
+  const [activeTab, setActiveTab] = useState(getInitialTab);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const currentDoc = DOCS_CONTENT[activeTab] || DOCS_CONTENT["getting-started"];
+  const location = useLocation();
+
+  // Sync from URL hash on navigation (e.g. back/forward buttons)
+  useEffect(() => {
+    const hash = location.hash.slice(1);
+    if (hash && DOCS_CONTENT[hash] && hash !== activeTab) {
+      setActiveTab(hash);
+      window.scrollTo(0, 0);
+    }
+  }, [location.hash]);
+
+  const changeTab = (id) => {
+    setActiveTab(id);
+    window.location.hash = id;
+    setIsSidebarOpen(false);
+    setIsMobileMenuOpen(false);
+    window.scrollTo(0, 0);
+  };
 
   const NavItem = ({ id, label }) => (
     <button
-      onClick={() => {
-        setActiveTab(id);
-        setIsSidebarOpen(false);
-        setIsMobileMenuOpen(false);
-        window.scrollTo(0, 0);
-      }}
+      onClick={() => changeTab(id)}
       className={`docs-nav-link ${activeTab === id ? "active" : ""}`}
     >
       {label}
