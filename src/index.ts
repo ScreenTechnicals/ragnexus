@@ -17,6 +17,7 @@ export {
     RerankerError,
     VectorStoreError
 } from "./errors";
+export { TreeStoreError } from "./tree-store/errors";
 
 // Utils
 export { sha256 } from "./utils/hash";

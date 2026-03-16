@@ -1079,6 +1079,341 @@ const embedder = new GeminiEmbedder({
       </>
     ),
   },
+
+  "tree-store": {
+    title: "Tree Store Plugin",
+    content: (
+      <>
+        <p>
+          The <strong>Tree Store</strong> is an optional plugin that adds{" "}
+          <strong>structured, deterministic knowledge routing</strong> to
+          RagNexus. Instead of relying solely on vector similarity (which can
+          drift), you define an exact knowledge tree — and the AI can{" "}
+          <em>only</em> answer from matched nodes.
+        </p>
+
+        <div className="callout">
+          <div className="callout-title">
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="16" x2="12" y2="12"></line>
+              <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+            Zero Hallucination by Design
+          </div>
+          <p>
+            With Tree Store, the LLM never sees information outside your defined
+            nodes. If a query matches <code>pricing.pro</code>, the model gets{" "}
+            <em>exactly</em> that node's content — nothing more. This makes
+            hallucination structurally impossible for tree-routed answers.
+          </p>
+        </div>
+
+        <h2>How It Works</h2>
+        <p>
+          You define a tree of knowledge nodes, each with an ID, content, and
+          keywords. When a user asks a question, the router matches the query to
+          the best node(s), and only that content is injected into the LLM
+          context.
+        </p>
+        <CodeBlock
+          code={`Developer defines TreeSpec (nodes with id, content, keywords)
+       ↓
+User asks question
+       ↓
+Router matches query → node path(s)
+  ├── KeywordRouter (fast, deterministic, no LLM needed)
+  └── LLMRouter (flexible, uses model to classify)
+       ↓
+Only matched node content → injected as LLM context
+       ↓
+Answer is bounded by developer's exact specs`}
+          language="text"
+        />
+
+        <h2>Installation</h2>
+        <p>
+          Tree Store is included in the <code>ragnexus</code> package as a
+          separate entry point — no extra install needed:
+        </p>
+        <CodeBlock
+          code={`import { TreeStore } from "ragnexus/tree-store";`}
+          language="typescript"
+        />
+
+        <h2>Defining a Knowledge Tree</h2>
+        <p>
+          A <code>TreeSpec</code> is just an array of nodes. Nodes can be nested
+          (children), and each node has an ID, label, content, and optional
+          keywords for deterministic routing.
+        </p>
+        <CodeBlock
+          code={`import { TreeStore } from "ragnexus/tree-store";
+import type { TreeSpec } from "ragnexus/tree-store";
+
+const knowledgeTree: TreeSpec = {
+  nodes: [
+    {
+      id: "pricing",
+      label: "Pricing",
+      content: "We offer Free, Pro ($29/mo), and Enterprise plans.",
+      keywords: ["pricing", "price", "cost", "plan", "how much"],
+      description: "Pricing plans and billing",
+      children: [
+        {
+          id: "free",
+          label: "Free Plan",
+          content: "Free: 1,000 API calls/month, 1 project, community support.",
+          keywords: ["free", "free plan", "free tier"],
+        },
+        {
+          id: "pro",
+          label: "Pro Plan",
+          content: "Pro ($29/mo): 100K API calls, unlimited projects, email support.",
+          keywords: ["pro", "pro plan", "professional"],
+        },
+      ],
+    },
+    {
+      id: "auth",
+      label: "Authentication",
+      content: "We support API keys, OAuth 2.0, and JWT tokens.",
+      keywords: ["auth", "login", "api key", "oauth", "jwt"],
+      description: "How to authenticate with the API",
+    },
+  ],
+};
+
+const store = new TreeStore({ tree: knowledgeTree });`}
+          language="typescript"
+        />
+
+        <h2>Routing Strategies</h2>
+        <h3>Keyword Router (default)</h3>
+        <p>
+          Fast, deterministic, zero external dependencies. Scores each node by{" "}
+          <code>matchedKeywords / totalKeywords</code>. Supports multi-word
+          keywords like <code>"enterprise plan"</code>.
+        </p>
+        <CodeBlock
+          code={`// Keyword routing (default — no LLM needed)
+const result = await store.route("How much does the pro plan cost?");
+// result.nodes → [{ id: "pro", path: "pricing.pro", confidence: 0.66, ... }]
+// result.strategy → "keyword"`}
+          language="typescript"
+        />
+
+        <h3>LLM Router</h3>
+        <p>
+          For natural language queries where keywords may not match exactly.
+          Builds a classification prompt listing all nodes and asks the LLM to
+          return the best matches. You provide your own{" "}
+          <code>complete</code> function — works with any model.
+        </p>
+        <CodeBlock
+          code={`import OpenAI from "openai";
+
+const openai = new OpenAI();
+
+const store = new TreeStore({
+  tree: knowledgeTree,
+  llm: {
+    complete: async (prompt) => {
+      const res = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+      });
+      return res.choices[0].message.content ?? "";
+    },
+  },
+});
+
+// Use LLM routing for flexible matching
+const result = await store.route("I need to sign in to my account", {
+  strategy: "llm",
+});`}
+          language="typescript"
+        />
+
+        <h2>Querying (returns RAGDocument[])</h2>
+        <p>
+          The <code>query()</code> method routes and returns matched content as{" "}
+          <code>RAGDocument[]</code> — the same format used by the vector store.
+          This is the main integration point.
+        </p>
+        <CodeBlock
+          code={`const docs = await store.query("What's the pricing?");
+// docs → [
+//   { id: "tree:pricing", text: "We offer Free, Pro...", source: "tree-store:pricing", score: 0.75 },
+//   { id: "tree:pro",     text: "Pro ($29/mo): ...",    source: "tree-store:pricing.pro", score: 0.66 }
+// ]`}
+          language="typescript"
+        />
+
+        <h2>Standalone Context Building</h2>
+        <p>
+          Use <code>buildContext()</code> to get LLM-ready messages without
+          plugging into the full RAGEngine:
+        </p>
+        <CodeBlock
+          code={`const messages = await store.buildContext({
+  messages: [{ role: "user", content: "How do I log in?" }],
+  systemPrompt: "You are a helpful support assistant.",
+});
+
+// messages is ready to pass to any LLM provider
+const response = await openai.chat.completions.create({
+  model: "gpt-4o-mini",
+  messages,
+});`}
+          language="typescript"
+        />
+
+        <h2>Combining with Vector Store (Hybrid)</h2>
+        <p>
+          The most powerful setup: plug the TreeStore into the RAGEngine
+          alongside a vector store. Tree results (structured) are prepended
+          before vector results (unstructured), so deterministic knowledge always
+          takes priority.
+        </p>
+        <CodeBlock
+          code={`import { createRag, OpenAIEmbedder, InMemoryVectorStore } from "ragnexus";
+import { TreeStore } from "ragnexus/tree-store";
+
+const treeStore = new TreeStore({ tree: knowledgeTree });
+const embedder = new OpenAIEmbedder({ model: "text-embedding-3-small" });
+
+const rag = createRag({
+  storage: { vector: new InMemoryVectorStore(embedder) },
+  embedder,
+  treeStore, // ← plug in structured knowledge
+});
+
+// Now buildContext() merges BOTH sources:
+// 1. Tree nodes matched by keywords (deterministic, high priority)
+// 2. Vector docs matched by semantic similarity (flexible, lower priority)
+const messages = await rag.buildContext({
+  messages: [{ role: "user", content: "How do I install the SDK?" }],
+});`}
+          language="typescript"
+        />
+
+        <div className="callout">
+          <div className="callout-title">
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="16" x2="12" y2="12"></line>
+              <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+            When to Use Which?
+          </div>
+          <p>
+            <strong>Tree Store alone</strong> — when you have a fixed, curated
+            knowledge base (pricing, FAQ, compliance) and need guaranteed
+            accuracy.
+            <br />
+            <strong>Vector Store alone</strong> — when content is large,
+            unstructured, or frequently changing (blogs, docs, crawled pages).
+            <br />
+            <strong>Both together</strong> — tree handles the "known knowns"
+            (structured facts) while vector handles the long tail (free-form
+            content). Best of both worlds.
+          </p>
+        </div>
+
+        <h2>Utility Methods</h2>
+        <CodeBlock
+          code={`// Get a node by ID
+store.getNode("pro"); // → TreeNode { id: "pro", label: "Pro Plan", ... }
+
+// Get a node by dot-path
+store.getNodeByPath("pricing.pro"); // → TreeNode
+
+// List all paths in the tree
+store.listPaths(); // → ["pricing", "pricing.free", "pricing.pro", "auth"]`}
+          language="typescript"
+        />
+
+        <h2>Use Cases</h2>
+        <div
+          className="feature-grid"
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(2, 1fr)",
+            gap: "1.5rem",
+            marginTop: "2rem",
+          }}
+        >
+          {[
+            {
+              title: "SaaS Pricing Bot",
+              desc: "Define your exact plans, limits, and pricing in a tree. The AI can only quote real numbers — never invents prices or features.",
+            },
+            {
+              title: "Compliance / Legal FAQ",
+              desc: "Regulatory answers must be exact. Tree Store ensures the model only surfaces your approved, reviewed content.",
+            },
+            {
+              title: "Product Feature Navigator",
+              desc: "Map your product's feature set as a tree. Users ask 'how do I export data?' and get routed to the exact feature node.",
+            },
+            {
+              title: "Internal Policy Assistant",
+              desc: "HR policies, IT procedures, onboarding steps — structured content where accuracy matters more than flexibility.",
+            },
+            {
+              title: "API Reference Bot",
+              desc: "Define endpoints, parameters, and error codes as nodes. Keyword routing catches exact terms like '429' or 'rate limit'.",
+            },
+            {
+              title: "Hybrid Knowledge Base",
+              desc: "Tree handles structured facts (pricing, auth, limits). Vector store handles the long tail (blog posts, changelogs, tutorials).",
+            },
+          ].map(({ title, desc }) => (
+            <div
+              key={title}
+              className="feature-card"
+              style={{ padding: "1.5rem" }}
+            >
+              <h4>{title}</h4>
+              <p style={{ fontSize: "0.9rem", color: "var(--text-secondary)" }}>
+                {desc}
+              </p>
+            </div>
+          ))}
+        </div>
+
+        <h2>Full Example</h2>
+        <p>
+          See <code>examples/tree-store-demo.ts</code> for a complete working
+          demo that combines TreeStore + VectorStore with the OpenAI adapter.
+          Run it with:
+        </p>
+        <CodeBlock
+          code={`npm run demo:tree-store`}
+          language="bash"
+        />
+      </>
+    ),
+  },
 };
 
 const NAV = [
@@ -1116,6 +1451,10 @@ const NAV = [
   {
     group: "Integrations",
     items: [{ id: "adapters", label: "Provider Adapters" }],
+  },
+  {
+    group: "Plugins",
+    items: [{ id: "tree-store", label: "Tree Store" }],
   },
 ];
 

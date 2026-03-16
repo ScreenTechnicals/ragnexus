@@ -10,6 +10,11 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.mjs",
       "require": "./dist/index.js"
+    },
+    "./tree-store": {
+      "types": "./dist/tree-store/index.d.ts",
+      "import": "./dist/tree-store/index.mjs",
+      "require": "./dist/tree-store/index.js"
     }
   },
   "files": [
@@ -19,7 +24,8 @@
     "build": "tsup",
     "dev": "tsup --watch",
     "test": "vitest run",
-    "chat": "vite-node examples/openai-ink.tsx"
+    "chat": "vite-node examples/openai-ink.tsx",
+    "demo:tree-store": "vite-node examples/tree-store-demo.ts"
   },
   "keywords": [
     "rag",

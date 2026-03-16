@@ -141,6 +141,14 @@ function Home() {
             streaming and typed message formats.
           </p>
         </div>
+        <div className="feature-card">
+          <div className="feature-icon">🌳</div>
+          <h3>Tree Store Plugin</h3>
+          <p>
+            Define a structured knowledge tree as your source of truth.
+            Deterministic keyword or LLM routing — zero hallucination, guaranteed.
+          </p>
+        </div>
       </section>
 
       <section className="container code-section">

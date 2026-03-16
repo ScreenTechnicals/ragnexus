@@ -40,6 +40,11 @@ export interface RAGEngineConfig {
      * Observability hook — called after retrieval with the final filtered docs.
      */
     onRetrieve?: (docs: RAGDocument[]) => void;
+    /**
+     * Optional tree-store for structured knowledge routing.
+     * Duck-typed to avoid circular dependency on the tree-store plugin.
+     */
+    treeStore?: { query: (query: string, options?: any) => Promise<RAGDocument[]> };
 }
 
 // ─── Engine ──────────────────────────────────────────────────────────────────
@@ -48,6 +53,7 @@ export class RAGEngine extends EventEmitter<RAGEngineEvents> {
     private vectorStore?: VectorStore;
     private memoryManager?: MemoryManager;
     private embedder: Embedder;
+    private treeStore?: { query: (query: string, options?: any) => Promise<RAGDocument[]> };
 
     public guardrails: Guardrails;
     public contextBuilder: ContextBuilder;
@@ -75,6 +81,10 @@ export class RAGEngine extends EventEmitter<RAGEngineEvents> {
         if (this.vectorStore) {
             this.retriever = new Retriever(this.vectorStore, this.embedder, this.guardrails, config.reranker);
         }
+
+        if (config.treeStore) {
+            this.treeStore = config.treeStore;
+        }
     }
 
     /**
@@ -96,9 +106,16 @@ export class RAGEngine extends EventEmitter<RAGEngineEvents> {
             memoryFacts = await this.memoryManager.getMemory(userId);
         }
 
-        // Retrieve documents
+        // Retrieve documents from tree-store (structured knowledge)
+        if (this.treeStore && query) {
+            const treeDocs = await this.treeStore.query(query);
+            retrievedDocs = [...treeDocs, ...retrievedDocs];
+        }
+
+        // Retrieve documents from vector store
         if (this.retriever && query) {
-            retrievedDocs = await this.retriever.retrieve(query, { topK, searchMode, alpha });
+            const vectorDocs = await this.retriever.retrieve(query, { topK, searchMode, alpha });
+            retrievedDocs = [...retrievedDocs, ...vectorDocs];
         }
 
         // Fire retrieve event
