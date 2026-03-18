@@ -1634,6 +1634,158 @@ REDIS_URL=redis://redis.internal.yourcompany.com:6379
 COHERE_API_KEY=your-cohere-key`}
           language="bash"
         />
+
+        <h2>Data Persistence</h2>
+        <p>
+          Understanding where your data lives and how it persists across
+          restarts is critical for production deployments.
+        </p>
+
+        <h3>Docker Infrastructure (Qdrant + Redis)</h3>
+        <p>
+          The provided <code>docker-compose.yml</code> uses{" "}
+          <strong>named Docker volumes</strong> for both services. Data{" "}
+          <strong>survives container restarts</strong> and{" "}
+          <code>docker compose down</code> / <code>docker compose up</code>{" "}
+          cycles.
+        </p>
+        <CodeBlock
+          code={`# docker/docker-compose.yml
+volumes:
+  redis_data:    # ← Redis data persists here
+  qdrant_data:   # ← Qdrant vectors persist here
+
+services:
+  redis:
+    volumes:
+      - redis_data:/data          # Persistent
+  qdrant:
+    volumes:
+      - qdrant_data:/qdrant/storage  # Persistent`}
+          language="yaml"
+        />
+        <div className="callout">
+          <div className="callout-title">
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="16" x2="12" y2="12"></line>
+              <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+            When is data lost?
+          </div>
+          <p>
+            Only <code>docker compose down -v</code> (the <code>-v</code> flag)
+            removes volumes and destroys data. A normal{" "}
+            <code>docker compose down</code> keeps everything. Never use{" "}
+            <code>-v</code> in production unless you intend a full reset.
+          </p>
+        </div>
+
+        <h3>InMemoryVectorStore (Local / Dev)</h3>
+        <p>
+          <code>InMemoryVectorStore</code> lives in process memory — data is{" "}
+          <strong>lost when the process exits</strong>. For development or CLI
+          tools, use the built-in <code>save()</code> / <code>load()</code>{" "}
+          methods to persist embeddings to a JSON file:
+        </p>
+        <CodeBlock
+          code={`import { InMemoryVectorStore, OpenAIEmbedder } from "ragnexus";
+
+const embedder = new OpenAIEmbedder();
+
+// Save after indexing — stores docs + vectors, no re-embedding needed
+await vectorStore.save("./cache/vectors.json");
+
+// Load on next run — fully hydrated, instant startup
+const store = await InMemoryVectorStore.load("./cache/vectors.json", embedder);`}
+          language="typescript"
+        />
+        <p>
+          The snapshot includes both the documents and their embedding vectors,
+          so loading is <strong>instant</strong> — no API calls to the embedding
+          provider. The Repo Bot example uses this automatically, caching to{" "}
+          <code>.ragnexus/vector-store.json</code> inside the target repo.
+        </p>
+
+        <h3>Persistence Summary</h3>
+        <div
+          style={{
+            overflowX: "auto",
+            marginTop: "1rem",
+          }}
+        >
+          <table
+            style={{
+              width: "100%",
+              borderCollapse: "collapse",
+              fontSize: "0.9rem",
+            }}
+          >
+            <thead>
+              <tr
+                style={{
+                  borderBottom: "1px solid var(--glass-border)",
+                  textAlign: "left",
+                }}
+              >
+                <th style={{ padding: "0.75rem" }}>Storage</th>
+                <th style={{ padding: "0.75rem" }}>Persists?</th>
+                <th style={{ padding: "0.75rem" }}>How</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                [
+                  "QdrantVectorStore",
+                  "Yes",
+                  "Server-side — data on Qdrant's disk/volume",
+                ],
+                [
+                  "RedisMemoryStore",
+                  "Yes",
+                  "Server-side — Redis AOF/RDB persistence",
+                ],
+                [
+                  "InMemoryVectorStore",
+                  "Manual",
+                  "save()/load() to JSON snapshot file",
+                ],
+                ["InMemoryStore", "No", "Process memory only — lost on exit"],
+              ].map(([store, persists, how]) => (
+                <tr
+                  key={store}
+                  style={{
+                    borderBottom: "1px solid var(--glass-border)",
+                  }}
+                >
+                  <td style={{ padding: "0.75rem" }}>
+                    <code>{store}</code>
+                  </td>
+                  <td style={{ padding: "0.75rem" }}>
+                    <strong>{persists}</strong>
+                  </td>
+                  <td
+                    style={{
+                      padding: "0.75rem",
+                      color: "var(--text-secondary)",
+                    }}
+                  >
+                    {how}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </>
     ),
   },

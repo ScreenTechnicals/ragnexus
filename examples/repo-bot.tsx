@@ -509,6 +509,28 @@ const EXCLUDE_PATTERNS = spec.exclude || DEFAULT_EXCLUDE;
 const MODEL = spec.model || 'gpt-4o-mini';
 const TOP_K = spec.topK || 8;
 const repoName = path.basename(repoPath);
+const FRESH = args.includes('--fresh');
+
+// ─── Snapshot cache ──────────────────────────────────────────────────────────
+// Persists embeddings to disk so re-runs don't re-embed everything.
+// Stored in .ragnexus/ inside the target repo.
+
+const cacheDir = path.join(repoPath, '.ragnexus');
+const snapshotPath = path.join(cacheDir, 'vector-store.json');
+
+function ensureCacheDir() {
+    if (!fs.existsSync(cacheDir)) {
+        fs.mkdirSync(cacheDir, { recursive: true });
+        // Add to .gitignore if it exists
+        const gitignorePath = path.join(repoPath, '.gitignore');
+        if (fs.existsSync(gitignorePath)) {
+            const content = fs.readFileSync(gitignorePath, 'utf-8');
+            if (!content.includes('.ragnexus')) {
+                fs.appendFileSync(gitignorePath, '\n# RagNexus bot cache\n.ragnexus/\n');
+            }
+        }
+    }
+}
 
 // ─── File walker ──────────────────────────────────────────────────────────────
 
@@ -544,19 +566,34 @@ const splitter = new TextSplitter({
     chunkOverlap: spec.chunkOverlap || 100,
 });
 const embedder = new OpenAIEmbedder({ model: 'text-embedding-3-small' });
-const vectorStore = new InMemoryVectorStore(embedder);
+
+// Vector store and RAG engine are created lazily in the indexing step
+// so we can load from snapshot if available.
+let vectorStore: InMemoryVectorStore = new InMemoryVectorStore(embedder);
 
 // TreeStore — structured knowledge that gets prepended to vector results
 const treeStore = spec.tree ? new TreeStore({ tree: spec.tree }) : undefined;
 const treeNodeCount = treeStore ? treeStore.listPaths().length : 0;
 
-const rag = createRag({
+let rag = createRag({
     storage: { vector: vectorStore, memory: new InMemoryStore() },
     embedder,
     guardrails: { minRelevanceScore: 0.25, maxTokens: 6144 },
     ...(treeStore ? { treeStore } : {}),
 });
-const adapter = new OpenAIAdapter(rag);
+let adapter = new OpenAIAdapter(rag);
+
+/** Rebuild RAG engine with a new vector store (after loading snapshot). */
+function rebuildRag(store: InMemoryVectorStore) {
+    vectorStore = store;
+    rag = createRag({
+        storage: { vector: store, memory: new InMemoryStore() },
+        embedder,
+        guardrails: { minRelevanceScore: 0.25, maxTokens: 6144 },
+        ...(treeStore ? { treeStore } : {}),
+    });
+    adapter = new OpenAIAdapter(rag);
+}
 
 // ─── System prompt ────────────────────────────────────────────────────────────
 
@@ -596,6 +633,17 @@ const App = () => {
         } else {
             (async () => {
                 try {
+                    // Try loading from cached snapshot (skip if --fresh)
+                    if (!FRESH && fs.existsSync(snapshotPath)) {
+                        setStatusMsg('Loading cached embeddings…');
+                        const cached = await InMemoryVectorStore.load(snapshotPath, embedder);
+                        rebuildRag(cached);
+                        setChunkCount((cached as any).docs?.length ?? 0);
+                        setStatusMsg('Loaded from cache.');
+                        setStep('chat');
+                        return;
+                    }
+
                     // 1. Walk local files
                     setStatusMsg('Scanning repository files…');
                     const files = walkDir(repoPath);
@@ -649,6 +697,11 @@ const App = () => {
                     setStatusMsg(`Embedding ${chunks.length} chunks…`);
                     const result = await rag.upsertDocuments(chunks);
                     setChunkCount(result.added + result.updated);
+
+                    // 4. Save snapshot for next run
+                    setStatusMsg('Saving cache…');
+                    ensureCacheDir();
+                    await vectorStore.save(snapshotPath);
 
                     setStep('chat');
                 } catch (e: any) {
@@ -762,7 +815,7 @@ const App = () => {
             {/* Hints */}
             <Box marginLeft={2} marginTop={1}>
                 <Text color="gray" dimColor>
-                    <Text color="cyan">exit</Text> to quit
+                    <Text color="cyan">exit</Text> to quit · <Text color="cyan">--fresh</Text> to re-index
                 </Text>
             </Box>
 
