@@ -25,6 +25,8 @@
     "dev": "tsup --watch",
     "test": "vitest run",
     "chat": "vite-node examples/openai-ink.tsx",
+    "repo-bot": "vite-node examples/repo-bot.tsx --",
+    "onboard": "vite-node examples/repo-bot.tsx -- . examples/ragnexus-onboard.spec.json",
     "demo:tree-store": "vite-node examples/tree-store-demo.ts"
   },
   "keywords": [

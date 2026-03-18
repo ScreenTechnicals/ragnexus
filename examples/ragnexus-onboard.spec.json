@@ -1,0 +1,137 @@
+{
+  "include": [".ts", ".tsx", ".md", ".json"],
+  "exclude": [
+    "node_modules", ".git", "dist", "build", "coverage",
+    "web", "docker", "storage", ".turbo", ".cache"
+  ],
+  "urls": [
+    "https://ragnexus.devverse.io/"
+  ],
+  "maxCrawlPages": 20,
+  "model": "gpt-4o-mini",
+  "topK": 10,
+  "chunkSize": 800,
+  "chunkOverlap": 100,
+  "systemPrompt": "You are the RagNexus onboarding assistant. Your job is to help new contributors understand the codebase, architecture, and how to get started.\n\nYou have access to:\n- The full RagNexus source code (src/, tests/, examples/)\n- The official documentation from ragnexus.devverse.io\n- A structured knowledge tree with deterministic facts about the project\n\nRULES:\n1. Answer ONLY from the retrieved context — real source files, official docs, and tree-store facts.\n2. When referencing code, always include the file path.\n3. When explaining concepts, prefer linking to the relevant doc page or source file.\n4. If the context doesn't cover the question, say so honestly.\n5. For \"how do I contribute\" questions, guide them through the repo structure, key files, and patterns.\n6. Tree-store context is deterministic and always accurate — prioritize it for architectural and structural questions.",
+  "tree": {
+    "defaultStrategy": "keyword",
+    "nodes": [
+      {
+        "id": "project-structure",
+        "label": "Project Structure",
+        "content": "RagNexus source lives in src/ with these directories: core/ (RAGEngine, ContextBuilder, Guardrails), adapters/ (OpenAI, Anthropic, Gemini, Genkit, VercelAI), storage/ (InMemoryVectorStore, InMemoryStore, QdrantVectorStore, RedisMemoryStore), embeddings/ (OpenAI, Cohere, Gemini, Ollama), retrieval/ (Retriever), rerankers/ (CohereReranker), crawlers/ (WebCrawler via Crawlee/Playwright), memory/ (MemoryManager), tree-store/ (TreeStore, keyword and LLM routers), utils/ (TextSplitter, hash, retry). Entry point: src/index.ts. Tests: tests/. Examples: examples/. Build: tsup. Test runner: vitest.",
+        "keywords": ["structure", "directory", "folder", "layout", "organization", "where", "files", "src", "project"],
+        "description": "Overall project structure and directory layout",
+        "children": [
+          {
+            "id": "core-dir",
+            "label": "Core Directory",
+            "content": "src/core/ contains 3 files: rag-engine.ts (RAGEngine class + createRag factory — the main entry point that orchestrates retrieval, guardrails, memory, and tree-store), context-builder.ts (ContextBuilder — injects retrieved docs and memory into LLM message arrays with sandboxing and grounding instructions), guardrails.ts (Guardrails — 4-layer protection: instruction stripping, content sandboxing with token budget, relevance filtering, density-based rejection).",
+            "keywords": ["core", "rag-engine", "context-builder", "guardrails", "rag engine"],
+            "description": "Core directory: RAGEngine, ContextBuilder, Guardrails"
+          },
+          {
+            "id": "adapters-dir",
+            "label": "Adapters Directory",
+            "content": "src/adapters/ has 5 adapters: openai.ts (OpenAIAdapter), anthropic.ts (AnthropicAdapter), gemini.ts (GeminiAdapter), genkit.ts (GenkitAdapter), vercel-ai.ts (VercelAIAdapter). Each adapter wraps RAGEngine.buildContext() and transforms the enriched messages into the format expected by its respective LLM SDK. To add a new adapter: create a new file in src/adapters/, accept RAGEngine in the constructor, call this.engine.buildContext() with the user's messages and RAG options, return the modified params.",
+            "keywords": ["adapter", "adapters", "openai adapter", "anthropic adapter", "gemini adapter", "vercel", "genkit", "add adapter", "new adapter"],
+            "description": "LLM SDK adapters and how to add new ones"
+          },
+          {
+            "id": "storage-dir",
+            "label": "Storage Directory",
+            "content": "src/storage/ has 4 implementations: vector-store.ts (InMemoryVectorStore — cosine similarity + BM25 hybrid search, JSON snapshot persistence via save/load, TTL support), memory-store.ts (InMemoryStore — simple Map-based MemoryStore), qdrant-store.ts (QdrantVectorStore — cloud-native vector DB with content-hash upsert detection), redis-store.ts (RedisMemoryStore — Redis sorted sets with importance scoring and deduplication). To add a new store: implement the VectorStore or MemoryStore interface from src/types.ts.",
+            "keywords": ["storage", "vector store", "memory store", "qdrant", "redis", "in memory", "inmemory", "persist", "save", "load"],
+            "description": "Storage implementations: vector stores and memory stores"
+          },
+          {
+            "id": "embeddings-dir",
+            "label": "Embeddings Directory",
+            "content": "src/embeddings/ has 4 embedder implementations: openai.ts (OpenAIEmbedder — text-embedding-3-small/large), cohere.ts (CohereEmbedder — embed-english-v3.0), gemini.ts (GeminiEmbedder — text-embedding-004), ollama.ts (OllamaEmbedder — local models via Ollama API). All implement the Embedder interface: embed(text) → number[] and optional embedBatch(texts) → number[][]. To add a new embedder: implement the Embedder interface from src/types.ts.",
+            "keywords": ["embedding", "embedder", "embeddings", "openai embedder", "cohere embedder", "gemini embedder", "ollama", "embed", "vector"],
+            "description": "Embedding providers and how to add new ones"
+          }
+        ]
+      },
+      {
+        "id": "getting-started",
+        "label": "Getting Started",
+        "content": "To set up RagNexus locally: 1) Clone the repo. 2) Run 'npm install' to install dependencies. 3) Copy .env.example to .env and fill in your API keys (OPENAI_API_KEY is the minimum). 4) Run 'npm run build' (tsup) to compile. 5) Run 'npm test' (vitest) to verify everything works. 6) Try an example: 'npm run chat' (OpenAI Ink chat) or 'npm run onboard' (this bot). Scripts: build → tsup, dev → tsup --watch, test → vitest run, chat → openai-ink example, onboard → repo-bot with ragnexus spec, demo:tree-store → tree-store demo.",
+        "keywords": ["getting started", "setup", "install", "start", "begin", "run", "contribute", "contributing", "onboard", "new contributor", "how to"],
+        "description": "How to set up and run the project locally"
+      },
+      {
+        "id": "rag-pipeline",
+        "label": "RAG Pipeline",
+        "content": "The full RAG pipeline in buildContext(): 1) Extract query from the latest user message. 2) If TreeStore is configured, call treeStore.query(query) — results are prepended (highest priority). 3) If VectorStore is configured, call retriever.retrieve(query, {topK, searchMode, alpha}) — Retriever embeds the query, searches the vector store, optionally reranks with CohereReranker, then applies guardrails (relevance filter, density rejection, instruction stripping). 4) Merge: tree docs first, then vector docs. 5) If memory is enabled, MemoryManager fetches user-specific facts. 6) ContextBuilder.injectIntoMessages() sandboxes all docs into the message array with source attribution, token budgeting, and a grounding instruction.",
+        "keywords": ["pipeline", "rag pipeline", "flow", "how it works", "buildcontext", "build context", "retrieval", "retrieve", "query"],
+        "description": "End-to-end RAG retrieval pipeline",
+        "children": [
+          {
+            "id": "search-modes",
+            "label": "Search Modes",
+            "content": "Three search modes in VectorStore: 'semantic' (default) — pure cosine similarity on embeddings. 'keyword' — BM25 (Okapi BM25) scoring, no embedding needed, fast and interpretable. 'hybrid' — weighted blend of BM25 + cosine, controlled by alpha parameter (0 = pure keyword, 1 = pure semantic, default 0.5). Hybrid normalizes scores before blending. Set via searchMode and alpha in RAGQueryOptions.",
+            "keywords": ["search", "search mode", "semantic", "keyword", "hybrid", "bm25", "cosine", "alpha"],
+            "description": "Semantic, keyword, and hybrid search modes"
+          },
+          {
+            "id": "reranking",
+            "label": "Reranking",
+            "content": "Optional cross-encoder reranking via CohereReranker (src/rerankers/cohere.ts). When configured in createRag({reranker}), the Retriever fetches 3x topK candidates from vector search, then CohereReranker rescores them using joint (query, doc) relevance via Cohere's rerank API. Results are trimmed back to topK. This significantly improves precision for ambiguous queries.",
+            "keywords": ["rerank", "reranker", "reranking", "cohere reranker", "cross encoder", "precision"],
+            "description": "Cross-encoder reranking with Cohere"
+          }
+        ]
+      },
+      {
+        "id": "guardrails",
+        "label": "Guardrails",
+        "content": "4-layer guardrail system in src/core/guardrails.ts: Layer 1 — Instruction Stripping: pattern-matches ingested docs for prompt injection patterns ('ignore previous instructions', 'system prompt', etc.) and replaces with [REDACTED]. Layer 2 — Content Sandboxing + Token Budget: wraps docs in '--- RETRIEVED CONTEXT ---' blocks with source attribution. Enforces maxTokens budget (default 4096), most-relevant docs first. Layer 3 — Relevance Threshold: filters docs below minRelevanceScore (default 0.5). Layer 4 — Density Rejection: calculates blocked-pattern density ratio per doc, rejects entire doc if density > maxPatternDensity (default 5%). Events: engine emits 'guardrail:reject' with the doc and reason.",
+        "keywords": ["guardrail", "guardrails", "safety", "security", "injection", "prompt injection", "redacted", "filter", "relevance", "threshold", "token budget", "density"],
+        "description": "4-layer guardrail system for safe RAG"
+      },
+      {
+        "id": "tree-store",
+        "label": "TreeStore",
+        "content": "TreeStore (src/tree-store/) provides structured, deterministic knowledge routing. Define a TreeSpec with hierarchical nodes — each node has id, label, content, keywords, and optional children. Two routing strategies: 'keyword' (default) — case-insensitive substring matching, confidence = matched/total keywords, fast and deterministic. 'llm' — sends classification prompt to an LLM, returns node IDs with confidence scores, flexible but requires LLM call. Integration: pass treeStore to createRag({treeStore}). Tree results are prepended before vector results, giving them higher priority. The AI cannot hallucinate tree content — it only sees exact node text.",
+        "keywords": ["tree store", "treestore", "tree", "structured", "deterministic", "knowledge tree", "routing", "keyword router", "llm router", "node", "treespec"],
+        "description": "TreeStore for structured deterministic knowledge"
+      },
+      {
+        "id": "memory",
+        "label": "Memory System",
+        "content": "Per-user memory via MemoryManager (src/memory/memory-manager.ts). MemoryFact has: id (UUID), type ('fact'|'preference'|'summary'), userId, content, importance (0-1), createdAt. Deduplication: normalizes text (lowercase, collapse whitespace), detects exact matches and substring containment. Storage backends: InMemoryStore (Map-based) or RedisMemoryStore (sorted sets with importance scoring). Enable in queries with {memory: true, userId: 'user123'}. Facts injected into context sorted by importance (highest first).",
+        "keywords": ["memory", "memory store", "user memory", "remember", "fact", "preference", "memorymanager", "dedup", "deduplication"],
+        "description": "Per-user memory management and deduplication"
+      },
+      {
+        "id": "crawlers",
+        "label": "Web Crawlers",
+        "content": "WebCrawler (src/crawlers/crawlee.ts) uses Crawlee + Playwright for headless browser crawling. Features: stealth plugin to avoid detection, configurable headless mode, extracts clean text (strips script/style/nav/footer), returns page content + discovered links, deterministic doc IDs via SHA-256 of URL, metadata includes title/crawledAt/etag/lastModified. Key method: scrapeWithLinks(urls) returns {docs, links}. maxRequestsPerCrawl controls how many pages to follow.",
+        "keywords": ["crawl", "crawler", "web crawler", "scrape", "playwright", "crawlee", "headless", "links"],
+        "description": "Web crawling with Playwright and Crawlee"
+      },
+      {
+        "id": "testing",
+        "label": "Testing",
+        "content": "Tests live in tests/ and use vitest. Run with 'npm test' (vitest run). Test files: rag-engine.test.ts (engine integration, events, guardrail rejection), tree-store.test.ts (TreeStore class, node lookup, routing), keyword-router.test.ts (keyword matching, scoring, confidence), llm-router.test.ts (prompt building, response parsing). Pattern: each test file mirrors the source structure. Mocking: use vi.fn() for LLM calls and external APIs.",
+        "keywords": ["test", "testing", "vitest", "tests", "test file", "run tests", "mock"],
+        "description": "Testing setup and patterns with vitest"
+      },
+      {
+        "id": "types",
+        "label": "Core Types",
+        "content": "Key interfaces in src/types.ts: RAGDocument {id, text, metadata?, source?, score?, contentHash?, updatedAt?, expiresAt?}. VectorStore {add, upsert, delete, search, searchByText?}. MemoryStore {get, add, delete?}. Embedder {embed, embedBatch?}. Reranker {rerank}. RAGQueryOptions {messages, userId?, memory?, topK?, systemPrompt?, searchMode?, alpha?}. RAGMessage {role, content}. SearchMode: 'semantic'|'keyword'|'hybrid'. UpsertResult {added, updated, skipped}. MemoryFact {id, type, userId, content, importance, createdAt}.",
+        "keywords": ["type", "types", "interface", "ragdocument", "vectorstore interface", "memorystore interface", "embedder interface", "ragqueryoptions", "ragmessage"],
+        "description": "Core TypeScript interfaces and types"
+      },
+      {
+        "id": "errors",
+        "label": "Error Handling",
+        "content": "Custom errors in src/errors.ts, all extend RagNexusError: VectorStoreError (vector ops), EmbeddingError (API failures, includes statusCode), CrawlError (crawling failures, includes URL), GuardrailError (safety violations), MemoryStoreError (memory ops), RerankerError (reranking failures). TreeStoreError in src/tree-store/errors.ts. Retry utility: withRetry() in src/utils/retry.ts — exponential backoff with jitter, retries on 429 and 5xx, default 3 attempts.",
+        "keywords": ["error", "errors", "error handling", "retry", "withretry", "ragnexuserror", "exception"],
+        "description": "Error classes and retry utilities"
+      }
+    ]
+  }
+}

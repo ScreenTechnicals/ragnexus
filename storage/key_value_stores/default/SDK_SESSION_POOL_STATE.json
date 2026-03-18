@@ -3,7 +3,7 @@
   "retiredSessionsCount": 0,
   "sessions": [
     {
-      "id": "session_gowGGjlIGj",
+      "id": "session_yLPSFrZplR",
       "cookieJar": {
         "version": "tough-cookie@6.0.1",
         "storeType": "MemoryCookieStore",
@@ -16,14 +16,14 @@
       "userData": {},
       "maxErrorScore": 3,
       "errorScoreDecrement": 0.5,
-      "expiresAt": "2026-03-16T07:01:23.733Z",
-      "createdAt": "2026-03-16T06:11:23.733Z",
+      "expiresAt": "2026-03-18T08:09:26.095Z",
+      "createdAt": "2026-03-18T07:19:26.095Z",
       "usageCount": 0,
       "maxUsageCount": 50,
       "errorScore": 0
     },
     {
-      "id": "session_xqnWEd3mqF",
+      "id": "session_vnhiXlSqQe",
       "cookieJar": {
         "version": "tough-cookie@6.0.1",
         "storeType": "MemoryCookieStore",
@@ -31,92 +31,13 @@
         "enableLooseMode": false,
         "allowSpecialUseDomain": true,
         "prefixSecurity": "silent",
-        "cookies": [
-          {
-            "key": "uid",
-            "value": "lo_083ffe4005c1",
-            "expires": "2027-04-20T06:11:31.993Z",
-            "domain": "medium.com",
-            "path": "/",
-            "secure": true,
-            "httpOnly": true,
-            "hostOnly": false,
-            "creation": "2026-03-16T06:12:02.419Z",
-            "lastAccessed": "2026-03-16T06:12:02.419Z"
-          },
-          {
-            "key": "_cfuvid",
-            "value": "L06K8IJ1GpLlNv_s7fRSIr2Uq3j6uh4RIxy3IhbIWPs-1773641485491-0.0.1.1-604800000",
-            "expires": "2026-03-16T07:02:02.418Z",
-            "domain": "medium.com",
-            "path": "/",
-            "secure": true,
-            "httpOnly": true,
-            "hostOnly": false,
-            "creation": "2026-03-16T06:12:02.421Z",
-            "lastAccessed": "2026-03-16T06:12:02.421Z"
-          },
-          {
-            "key": "sid",
-            "value": "1:4z7e4BzQrMAPVvKtRH9/+6TpqnC4+q+uyjMS+Kv7R9JQHyEKIEuoWNnQlrKdBB3b",
-            "expires": "2027-04-20T06:11:31.993Z",
-            "domain": "medium.com",
-            "path": "/",
-            "secure": true,
-            "httpOnly": true,
-            "hostOnly": false,
-            "creation": "2026-03-16T06:12:02.422Z",
-            "lastAccessed": "2026-03-16T06:12:02.422Z"
-          },
-          {
-            "key": "cf_clearance",
-            "value": "_FG1waVK27vkH9hXWhAXuZnWYH2ofsMVS3luh_sWytM-1773641498-1.2.1.1-0I3c0hUUtUyvo.AgnEHdKzUpIWTphF0FElO4LVA.sUdb5CCJwKtjAqGQQHeyjIQV2GMqc19QltNAxsznkj7kug4BoDNjPBDpZ6RFKaDa5PqtyCacFZ19K.pArep8wxlPoRpp9Yj0z26_OQ2spPrSAUgBFtXtJIX01muTVTVTdzQzgqSuUHN9Penzo5qLzuHHfQI_.1JJlPeTy48HOqzd_Wlx4SnbhsNZmvcrWE0fo28",
-            "expires": "2027-03-16T06:11:38.226Z",
-            "domain": "medium.com",
-            "path": "/",
-            "secure": true,
-            "httpOnly": true,
-            "hostOnly": false,
-            "creation": "2026-03-16T06:12:02.422Z",
-            "lastAccessed": "2026-03-16T06:12:02.422Z"
-          },
-          {
-            "key": "_dd_s",
-            "value": "rum=0&expire=1773642409936",
-            "expires": "2026-03-16T06:27:02.000Z",
-            "domain": "steve-yegge.medium.com",
-            "path": "/",
-            "hostOnly": true,
-            "creation": "2026-03-16T06:12:02.422Z",
-            "lastAccessed": "2026-03-16T06:12:02.422Z"
-          },
-          {
-            "key": "_ga_7JY7T788PK",
-            "value": "GS2.1.s1773641522$o1$g0$t1773641522$j60$l0$h0",
-            "expires": "2027-04-20T06:12:02.413Z",
-            "domain": "medium.com",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-03-16T06:12:02.422Z",
-            "lastAccessed": "2026-03-16T06:12:02.422Z"
-          },
-          {
-            "key": "_ga",
-            "value": "GA1.1.779479903.1773641522",
-            "expires": "2027-04-20T06:12:02.414Z",
-            "domain": "medium.com",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-03-16T06:12:02.422Z",
-            "lastAccessed": "2026-03-16T06:12:02.422Z"
-          }
-        ]
+        "cookies": []
       },
       "userData": {},
       "maxErrorScore": 3,
       "errorScoreDecrement": 0.5,
-      "expiresAt": "2026-03-16T07:01:23.735Z",
-      "createdAt": "2026-03-16T06:11:23.735Z",
+      "expiresAt": "2026-03-18T08:09:26.096Z",
+      "createdAt": "2026-03-18T07:19:26.096Z",
       "usageCount": 1,
       "maxUsageCount": 50,
       "errorScore": 0

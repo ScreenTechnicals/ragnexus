@@ -1414,6 +1414,606 @@ store.listPaths(); // → ["pricing", "pricing.free", "pricing.pro", "auth"]`}
       </>
     ),
   },
+
+  "enterprise-setup": {
+    title: "Enterprise Setup",
+    content: (
+      <>
+        <p>
+          RagNexus is designed for organizations that need{" "}
+          <strong>full control</strong> over their AI infrastructure. Every
+          component — LLM endpoints, embedding APIs, vector stores, and memory
+          backends — can be pointed at your own infrastructure with{" "}
+          <strong>custom base URLs</strong> and <strong>API keys</strong>.
+        </p>
+
+        <div className="callout">
+          <div className="callout-title">
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="16" x2="12" y2="12"></line>
+              <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+            Key Design Principle
+          </div>
+          <p>
+            RagNexus adapters <strong>never create HTTP connections</strong>.
+            They are pure message transformers — they take your messages, inject
+            RAG context, and return enriched messages. The actual SDK client
+            (with its base URL, API key, proxy config, etc.) is{" "}
+            <strong>entirely your responsibility</strong>. This is by design.
+          </p>
+        </div>
+
+        <h2>Architecture: What Connects Where</h2>
+        <CodeBlock
+          code={`┌──────────────────────────────────────────────────────────┐
+│                   Your Application                       │
+└──────────────┬───────────────────────────┬───────────────┘
+               │                           │
+     ┌─────────▼──────────┐     ┌──────────▼──────────┐
+     │  YOUR SDK Client   │     │   RagNexus Embedder  │
+     │ (OpenAI/Anthropic) │     │ (OpenAIEmbedder etc) │
+     │                    │     │                      │
+     │ apiKey: org-key    │     │ apiKey: org-key      │
+     │ baseURL: your-proxy│     │ baseUrl: your-proxy  │
+     └─────────┬──────────┘     └──────────┬───────────┘
+               │                           │
+     ┌─────────▼──────────┐     ┌──────────▼───────────┐
+     │  Adapter (message   │     │  Vector Store         │
+     │  transformer only)  │     │  (Qdrant / InMemory)  │
+     └────────────────────┘     └───────────────────────┘
+
+Adapters: ZERO network calls — they only enrich messages
+Embedders: Make API calls — support custom baseUrl + apiKey
+Storage: Your infrastructure — self-hosted Qdrant, Redis, etc.`}
+          language="text"
+        />
+
+        <h2>Custom LLM Endpoints</h2>
+        <p>
+          Since adapters don't manage SDK clients, you create your own with
+          whatever configuration your org needs. This works with proxied
+          endpoints, Azure OpenAI, self-hosted models, or any OpenAI-compatible
+          API.
+        </p>
+        <CodeBlock
+          code={`import OpenAI from "openai";
+import { OpenAIAdapter, createRag } from "ragnexus";
+
+// Your org's custom endpoint — Azure, proxy, self-hosted, etc.
+const openai = new OpenAI({
+  apiKey: process.env.ORG_API_KEY,
+  baseURL: "https://llm-proxy.yourcompany.com/v1",
+  defaultHeaders: {
+    "X-Org-Id": "your-org-id",  // custom headers if needed
+  },
+});
+
+// Adapter only touches messages — never makes HTTP calls
+const adapter = new OpenAIAdapter(rag);
+const config = await adapter.getCompletionConfig(
+  { model: "gpt-4o", messages, stream: true },
+  { topK: 10, memory: true, userId: "user-123" }
+);
+
+// YOUR client calls YOUR endpoint
+const stream = await openai.chat.completions.create(config);`}
+          language="typescript"
+        />
+
+        <h3>Azure OpenAI</h3>
+        <CodeBlock
+          code={`const openai = new OpenAI({
+  apiKey: process.env.AZURE_OPENAI_API_KEY,
+  baseURL: "https://your-resource.openai.azure.com/openai/deployments/your-deployment",
+  defaultQuery: { "api-version": "2024-02-01" },
+  defaultHeaders: { "api-key": process.env.AZURE_OPENAI_API_KEY },
+});
+
+// RagNexus adapter works identically — it's just messages
+const adapter = new OpenAIAdapter(rag);`}
+          language="typescript"
+        />
+
+        <h3>Self-Hosted Models (Ollama, vLLM, etc.)</h3>
+        <CodeBlock
+          code={`// Ollama exposes an OpenAI-compatible API
+const openai = new OpenAI({
+  apiKey: "ollama",  // not used but required by SDK
+  baseURL: "http://localhost:11434/v1",
+});
+
+// Works with any OpenAI-compatible server
+const adapter = new OpenAIAdapter(rag);
+const config = await adapter.getCompletionConfig(
+  { model: "llama3.1", messages },
+  { topK: 5 }
+);
+const response = await openai.chat.completions.create(config);`}
+          language="typescript"
+        />
+
+        <h2>Custom Embedding Endpoints</h2>
+        <p>
+          Embedders <strong>do</strong> make API calls, so they accept{" "}
+          <code>baseUrl</code> and <code>apiKey</code> in their constructors.
+          Point them at your org's embedding service.
+        </p>
+        <CodeBlock
+          code={`import { OpenAIEmbedder } from "ragnexus";
+
+const embedder = new OpenAIEmbedder({
+  apiKey: process.env.ORG_EMBEDDING_KEY,
+  baseUrl: "https://embeddings.yourcompany.com/v1",
+  model: "text-embedding-3-small",
+});
+
+// All embedding calls go through your endpoint
+// Works with Azure, self-hosted, or any OpenAI-compatible embedding API`}
+          language="typescript"
+        />
+        <p>
+          The same <code>baseUrl</code> + <code>apiKey</code> pattern is
+          available on all embedders:
+        </p>
+        <ul>
+          <li>
+            <code>OpenAIEmbedder</code> —{" "}
+            <code>{"{ apiKey, baseUrl, model }"}</code>
+          </li>
+          <li>
+            <code>CohereEmbedder</code> —{" "}
+            <code>{"{ apiKey, baseUrl, model }"}</code>
+          </li>
+          <li>
+            <code>GeminiEmbedder</code> — <code>{"{ apiKey, model }"}</code>
+          </li>
+          <li>
+            <code>OllamaEmbedder</code> —{" "}
+            <code>{"{ baseUrl, model }"}</code> (no key needed for local Ollama)
+          </li>
+        </ul>
+
+        <h2>Self-Hosted Vector Storage</h2>
+        <p>
+          For production deployments, use Qdrant or Redis on your own
+          infrastructure instead of in-memory stores.
+        </p>
+        <CodeBlock
+          code={`import { QdrantVectorStore, RedisMemoryStore, createRag } from "ragnexus";
+
+// Self-hosted Qdrant cluster
+const vectorStore = new QdrantVectorStore({
+  url: "https://qdrant.internal.yourcompany.com:6333",
+  apiKey: process.env.QDRANT_API_KEY,
+  collectionName: "knowledge-base",
+}, embedder);
+
+// Self-hosted Redis for user memory
+const memoryStore = new RedisMemoryStore(redisClient);
+
+const rag = createRag({
+  storage: { vector: vectorStore, memory: memoryStore },
+  embedder,
+  guardrails: { minRelevanceScore: 0.5, maxTokens: 4096 },
+});`}
+          language="typescript"
+        />
+
+        <h2>Environment Variables</h2>
+        <p>
+          A typical enterprise <code>.env</code> setup:
+        </p>
+        <CodeBlock
+          code={`# LLM Provider (used by YOUR SDK client, not RagNexus)
+LLM_API_KEY=sk-org-...
+LLM_BASE_URL=https://llm-proxy.yourcompany.com/v1
+
+# Embeddings (used by RagNexus embedder)
+OPENAI_API_KEY=sk-org-...
+EMBEDDING_BASE_URL=https://embeddings.yourcompany.com/v1
+
+# Vector Store
+QDRANT_URL=https://qdrant.internal.yourcompany.com:6333
+QDRANT_API_KEY=your-qdrant-key
+
+# Memory Store
+REDIS_URL=redis://redis.internal.yourcompany.com:6379
+
+# Optional: Reranking
+COHERE_API_KEY=your-cohere-key`}
+          language="bash"
+        />
+      </>
+    ),
+  },
+
+  "context-safety": {
+    title: "Context Safety & Bloat Prevention",
+    content: (
+      <>
+        <p>
+          One of the biggest risks in RAG systems is{" "}
+          <strong>context bloating</strong> — stuffing too many irrelevant or
+          low-quality documents into the LLM context, which degrades response
+          quality, increases latency, and wastes tokens. RagNexus{" "}
+          <strong>prevents context bloating by design</strong> through a
+          multi-layer filtering pipeline.
+        </p>
+
+        <h2>The 4-Layer Protection Pipeline</h2>
+        <CodeBlock
+          code={`User Query
+    │
+    ▼
+┌─────────────────────────┐
+│  topK Cap (default: 5)  │  ← Limits candidate pool from vector store
+└───────────┬─────────────┘
+            ▼
+┌─────────────────────────────────┐
+│  Layer 3: Relevance Threshold   │  ← Drops docs below minRelevanceScore
+│  (default: 0.5 cosine score)   │
+└───────────┬─────────────────────┘
+            ▼
+┌─────────────────────────────────┐
+│  Layer 4: Density Rejection     │  ← Rejects docs with injection patterns
+│  (> 5% blocked pattern words)  │
+└───────────┬─────────────────────┘
+            ▼
+┌─────────────────────────────────┐
+│  Layer 1: Instruction Stripping │  ← Redacts prompt injection attempts
+└───────────┬─────────────────────┘
+            ▼
+┌─────────────────────────────────────┐
+│  Layer 2: Token Budget (default:    │  ← Hard cap on injected context size
+│  4096 tokens). Most relevant first, │
+│  drops the rest.                    │
+└───────────┬─────────────────────────┘
+            ▼
+    Injected into LLM messages
+    (or empty if nothing survived)`}
+          language="text"
+        />
+
+        <h2>How Each Layer Prevents Bloat</h2>
+
+        <h3>topK Cap</h3>
+        <p>
+          The retriever only fetches <code>topK</code> candidates (default 5)
+          from the vector store. This is the first upper bound — you never get
+          more than this many candidates regardless of collection size.
+        </p>
+        <CodeBlock
+          code={`const messages = await rag.buildContext({
+  messages,
+  topK: 5,  // Max 5 candidates from vector search
+});`}
+          language="typescript"
+        />
+
+        <h3>Relevance Threshold (Layer 3)</h3>
+        <p>
+          Documents below <code>minRelevanceScore</code> are filtered out{" "}
+          <em>before</em> they reach the token budget. Low-quality filler never
+          makes it in. When a doc is rejected, the engine emits a{" "}
+          <code>guardrail:reject</code> event for observability.
+        </p>
+        <CodeBlock
+          code={`const rag = createRag({
+  storage: { vector: vectorStore },
+  embedder,
+  guardrails: {
+    minRelevanceScore: 0.5,  // Only docs with 50%+ cosine similarity
+    // Use 0.7+ for high-precision applications
+  },
+});
+
+// Listen for rejected docs
+rag.on("guardrail:reject", (doc, reason) => {
+  console.log(\`Rejected \${doc.id}: \${reason}\`);
+});`}
+          language="typescript"
+        />
+
+        <h3>Density-Based Rejection (Layer 4)</h3>
+        <p>
+          If a document contains too many blocked patterns (prompt injection
+          attempts), it's rejected entirely — not just redacted. Default
+          threshold is 5% of words matching blocked patterns.
+        </p>
+
+        <h3>Token Budget (Layer 2)</h3>
+        <p>
+          The final safety net. Documents are included most-relevant-first, and
+          the moment adding the next document would exceed{" "}
+          <code>maxTokens</code>, it <strong>stops</strong>. Remaining documents
+          are dropped. Token counting uses GPT tokenizer for accuracy.
+        </p>
+        <CodeBlock
+          code={`const rag = createRag({
+  storage: { vector: vectorStore },
+  embedder,
+  guardrails: {
+    maxTokens: 4096,  // Hard cap on context size
+    // Docs are ranked by relevance — best ones always get in
+  },
+});`}
+          language="typescript"
+        />
+
+        <h3>No-Context Passthrough</h3>
+        <p>
+          If zero documents survive all layers, <strong>nothing</strong> gets
+          injected. The LLM acts as a normal assistant instead of getting a
+          bloated empty context block. This means "hey hi" doesn't trigger
+          the infamous "I don't have enough information" response.
+        </p>
+
+        <div className="callout">
+          <div className="callout-title">
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="16" x2="12" y2="12"></line>
+              <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+            Summary
+          </div>
+          <p>
+            Every layer <strong>shrinks</strong> the context, never grows it.
+            The pipeline flows:{" "}
+            <code>
+              topK → relevance filter → density rejection → instruction strip →
+              token budget trim → inject
+            </code>
+            . The result is a minimal, high-quality context block that fits your
+            token budget with the most relevant documents always prioritized.
+          </p>
+        </div>
+
+        <h2>Configuring for Your Use Case</h2>
+        <CodeBlock
+          code={`// Strict: high-precision, minimal context
+const rag = createRag({
+  storage: { vector: vectorStore },
+  embedder,
+  guardrails: {
+    minRelevanceScore: 0.7,   // Only highly relevant docs
+    maxTokens: 2048,          // Tight context budget
+  },
+});
+
+// Permissive: broad retrieval, larger context
+const rag = createRag({
+  storage: { vector: vectorStore },
+  embedder,
+  guardrails: {
+    minRelevanceScore: 0.3,   // Include more borderline docs
+    maxTokens: 8192,          // Larger budget for complex queries
+  },
+});`}
+          language="typescript"
+        />
+      </>
+    ),
+  },
+
+  "repo-bot": {
+    title: "Repo Bot Example",
+    content: (
+      <>
+        <p>
+          <strong>Repo Bot</strong> is a ready-to-use example that turns any
+          local repository into an interactive AI chatbot. It indexes your source
+          code, crawls documentation URLs, and optionally uses a TreeStore for
+          deterministic knowledge — all in one command.
+        </p>
+
+        <h2>Quick Start</h2>
+        <CodeBlock
+          code={`# Point at any local repo
+npm run repo-bot -- /path/to/your/repo
+
+# With a spec file for custom configuration
+npm run repo-bot -- /path/to/your/repo spec.json
+
+# RagNexus contributor onboarding bot (indexes this repo + docs site)
+npm run onboard`}
+          language="bash"
+        />
+
+        <h2>How It Works</h2>
+        <CodeBlock
+          code={`Local Repo Path                   Spec JSON (optional)
+      │                                  │
+      ▼                                  ▼
+┌──────────────┐              ┌─────────────────┐
+│  Walk Files  │              │  Parse Config   │
+│  (include/   │              │  (include, urls, │
+│   exclude)   │              │   tree, model)  │
+└──────┬───────┘              └────────┬────────┘
+       │                               │
+       ▼                               ▼
+┌──────────────┐              ┌────────────────┐
+│  Read & Tag  │              │  Crawl URLs    │
+│  Source Files│              │  (WebCrawler)  │
+└──────┬───────┘              └────────┬───────┘
+       │                               │
+       └──────────┬────────────────────┘
+                  ▼
+         ┌────────────────┐
+         │  TextSplitter  │
+         │  (chunk files) │
+         └───────┬────────┘
+                 ▼
+         ┌────────────────┐
+         │ OpenAIEmbedder │
+         │ + VectorStore  │
+         └───────┬────────┘
+                 ▼
+         ┌────────────────┐
+         │ Interactive    │
+         │ Ink Chat UI    │
+         │ (hybrid search)│
+         └────────────────┘`}
+          language="text"
+        />
+
+        <h2>Spec File Format</h2>
+        <p>
+          Create a JSON spec file to customize what gets indexed, which URLs to
+          crawl, the LLM model, and an optional knowledge tree for deterministic
+          answers.
+        </p>
+        <CodeBlock
+          code={`{
+  "include": [".ts", ".tsx", ".js", ".md", ".json"],
+  "exclude": ["node_modules", ".git", "dist", "build"],
+  "urls": ["https://your-docs-site.com/"],
+  "maxCrawlPages": 20,
+  "model": "gpt-4o-mini",
+  "topK": 10,
+  "chunkSize": 800,
+  "chunkOverlap": 100,
+  "systemPrompt": "You are a helpful assistant for this codebase.",
+  "tree": {
+    "defaultStrategy": "keyword",
+    "nodes": [
+      {
+        "id": "architecture",
+        "label": "Architecture",
+        "content": "This project uses a modular architecture with...",
+        "keywords": ["architecture", "structure", "how it works"]
+      }
+    ]
+  }
+}`}
+          language="json"
+        />
+
+        <h2>Spec Fields</h2>
+        <ul>
+          <li>
+            <code>include</code> — File extensions to index (e.g.{" "}
+            <code>[".ts", ".md"]</code>). Defaults to all common source files.
+          </li>
+          <li>
+            <code>exclude</code> — Directories or files to skip (e.g.{" "}
+            <code>["node_modules", "dist"]</code>).
+          </li>
+          <li>
+            <code>urls</code> — URLs to crawl and index alongside repo files.
+            Uses the RagNexus <code>WebCrawler</code> with Playwright.
+          </li>
+          <li>
+            <code>maxCrawlPages</code> — Max pages to follow per URL (default
+            5).
+          </li>
+          <li>
+            <code>model</code> — OpenAI model for chat (default{" "}
+            <code>gpt-4o-mini</code>).
+          </li>
+          <li>
+            <code>topK</code> — Chunks to retrieve per query (default 8).
+          </li>
+          <li>
+            <code>chunkSize</code> / <code>chunkOverlap</code> — Text splitting
+            parameters.
+          </li>
+          <li>
+            <code>systemPrompt</code> — Custom system prompt override.
+          </li>
+          <li>
+            <code>tree</code> — Optional{" "}
+            <code>TreeSpec</code> for deterministic knowledge routing.
+            Tree results are prepended before vector results.
+          </li>
+        </ul>
+
+        <h2>TreeStore in Repo Bot</h2>
+        <p>
+          When a <code>tree</code> field is defined in the spec, the bot
+          creates a <code>TreeStore</code> and passes it to{" "}
+          <code>createRag()</code>. This means questions matching tree keywords
+          get <strong>deterministic answers</strong> from the tree nodes,
+          while everything else falls through to vector search over the source
+          code and crawled docs.
+        </p>
+        <CodeBlock
+          code={`// What happens internally when tree is in spec:
+const treeStore = new TreeStore({ tree: spec.tree });
+
+const rag = createRag({
+  storage: { vector: vectorStore, memory: memoryStore },
+  embedder,
+  treeStore,  // ← tree results prepended before vector results
+});`}
+          language="typescript"
+        />
+
+        <h2>RagNexus Onboarding Bot</h2>
+        <p>
+          The repo includes a pre-configured spec for onboarding new
+          contributors. It indexes the full RagNexus source code, crawls the
+          docs site, and includes a 16-node knowledge tree covering
+          architecture, adapters, storage, embeddings, guardrails, testing, and
+          more.
+        </p>
+        <CodeBlock
+          code={`# Run the onboarding bot
+npm run onboard
+
+# This is equivalent to:
+npm run repo-bot -- . examples/ragnexus-onboard.spec.json`}
+          language="bash"
+        />
+
+        <div className="callout">
+          <div className="callout-title">
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="16" x2="12" y2="12"></line>
+              <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+            Building Your Own
+          </div>
+          <p>
+            Copy <code>examples/ragnexus-onboard.spec.json</code>, change the
+            URLs and tree nodes to match your project, and run{" "}
+            <code>npm run repo-bot -- /your/repo your-spec.json</code>.
+            Any project can have its own onboarding bot in minutes.
+          </p>
+        </div>
+      </>
+    ),
+  },
 };
 
 const NAV = [
@@ -1455,6 +2055,17 @@ const NAV = [
   {
     group: "Plugins",
     items: [{ id: "tree-store", label: "Tree Store" }],
+  },
+  {
+    group: "Enterprise",
+    items: [
+      { id: "enterprise-setup", label: "Enterprise Setup" },
+      { id: "context-safety", label: "Context Safety" },
+    ],
+  },
+  {
+    group: "Examples",
+    items: [{ id: "repo-bot", label: "Repo Bot" }],
   },
 ];
 

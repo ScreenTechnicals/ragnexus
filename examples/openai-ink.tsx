@@ -1,10 +1,13 @@
+// Enable color for marked-terminal's bundled chalk — must run before import
+process.env.FORCE_COLOR = process.env.FORCE_COLOR || '1';
+
 import 'dotenv/config';
 import { Box, render, Text } from 'ink';
 import Spinner from 'ink-spinner';
 import TextInput from 'ink-text-input';
 import { marked } from 'marked';
 // @ts-ignore
-import TerminalRenderer from 'marked-terminal';
+import { markedTerminal } from 'marked-terminal';
 import OpenAI from 'openai';
 import { useCallback, useRef, useState } from 'react';
 import {
@@ -17,7 +20,7 @@ import {
     WebCrawler
 } from "../src";
 
-marked.setOptions({ renderer: new TerminalRenderer() as any });
+marked.use(markedTerminal());
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

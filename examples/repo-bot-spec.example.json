@@ -1,0 +1,9 @@
+{
+  "include": [".ts", ".tsx", ".js", ".jsx", ".md", ".json"],
+  "exclude": ["node_modules", ".git", "dist", "build", "coverage"],
+  "model": "gpt-4o-mini",
+  "topK": 8,
+  "chunkSize": 800,
+  "chunkOverlap": 100,
+  "systemPrompt": ""
+}
